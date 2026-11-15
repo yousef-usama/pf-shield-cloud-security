@@ -91,10 +91,10 @@ resource "aws_iam_policy" "soar_quarantine_deny_all" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "EmergencyQuarantineDenyAll"
-        Effect    = "Deny"
-        Action    = "*"
-        Resource  = "*"
+        Sid      = "EmergencyQuarantineDenyAll"
+        Effect   = "Deny"
+        Action   = "*"
+        Resource = "*"
       }
     ]
   })

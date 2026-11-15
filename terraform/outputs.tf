@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------------------------------------------------
-# ROOT OUTPUTS — PF-SHIELD PHASE 1 FOUNDATION
+# ROOT OUTPUTS — PF-SHIELD SECURITY CONTROL PLANE
 # ---------------------------------------------------------------------------------------------------------------------
 
 output "iam_workload_permission_boundary_arn" {
@@ -40,4 +40,24 @@ output "kyc_vault_bucket_name" {
 output "dynamodb_metadata_table_name" {
   description = "Properties & KYC metadata DynamoDB table name"
   value       = module.zero_trust_kyc_vault.dynamodb_table_name
+}
+
+output "soar_security_incidents_sns_topic_arn" {
+  description = "The ARN of the SNS topic receiving SOAR forensic incident alerts"
+  value       = module.soar_engine.security_incidents_sns_topic_arn
+}
+
+output "soar_s3_lockdown_lambda_arn" {
+  description = "The ARN of the S3 Lockdown SOAR Lambda function"
+  value       = module.soar_engine.s3_lockdown_lambda_arn
+}
+
+output "soar_iam_quarantine_lambda_arn" {
+  description = "The ARN of the IAM Quarantine SOAR Lambda function"
+  value       = module.soar_engine.iam_quarantine_lambda_arn
+}
+
+output "cloudtrail_audit_trail_arn" {
+  description = "The ARN of the multi-region management event CloudTrail"
+  value       = module.soar_engine.cloudtrail_arn
 }
