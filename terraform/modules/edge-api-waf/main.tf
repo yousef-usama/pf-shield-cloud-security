@@ -86,7 +86,7 @@ resource "aws_cloudwatch_log_group" "property_api_logs" {
 resource "aws_lambda_function" "property_api" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue omitted for stateless synchronous public API read handler
   #checkov:skip=CKV_AWS_117: Lambda is not VPC-bound to ensure $0 idle compute cost without NAT Gateway overhead
-  #checkov:skip=CKV_AWS_272: Code signing omitted for demo/portfolio architecture
+  #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
   function_name                  = "pf-property-api-${var.environment}"
   role                           = aws_iam_role.property_api_role.arn
   handler                        = "property_api_handler.lambda_handler"
@@ -192,7 +192,7 @@ resource "aws_cloudwatch_log_group" "kyc_vault_logs" {
 resource "aws_lambda_function" "kyc_vault" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue omitted for stateless synchronous presign handler
   #checkov:skip=CKV_AWS_117: Lambda is not VPC-bound to maintain $0 idle compute cost
-  #checkov:skip=CKV_AWS_272: Code signing omitted for demo/portfolio architecture
+  #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
   function_name                  = "pf-kyc-vault-${var.environment}"
   role                           = aws_iam_role.kyc_vault_role.arn
   handler                        = "kyc_vault_handler.lambda_handler"
@@ -230,7 +230,7 @@ resource "aws_apigatewayv2_api" "edge_api" {
   description   = "PF-Shield Zero-Trust HTTP API with native rate limiting and edge security"
 
   cors_configuration {
-    allow_origins = ["https://*.propertyfinder.ae"]
+    allow_origins = ["https://*.pf-shield.ae", "https://*.realestate.ae"]
     allow_methods = ["GET", "POST", "OPTIONS"]
     allow_headers = ["content-type", "authorization", "x-requested-with"]
     max_age       = 300

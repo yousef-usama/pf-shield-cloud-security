@@ -1,18 +1,17 @@
-# PF-Shield — Well-Architected Zero-Trust Real Estate API & Automated Cloud SOAR
+# PF-Shield — Zero-Trust Real Estate API & Automated Cloud SOAR
 
 [![DevSecOps Pipeline](https://img.shields.io/badge/CI%2FCD-DevSecOps%20Pipeline-success?style=for-the-badge&logo=github-actions)](.github/workflows/devsecops-pipeline.yml)
 [![Monthly Run Rate](https://img.shields.io/badge/FinOps%20Run%20Rate-%240.00%20--%20%241.10%20%2F%20mo-brightgreen?style=for-the-badge&logo=amazon-aws)](docs/WELL_ARCHITECTED_REVIEW.md)
 [![Compliance](https://img.shields.io/badge/Compliance-UAE%20PDPL%20%7C%20ISO%2027001%20%7C%20SOC%202-blue?style=for-the-badge&logo=securityscorecard)](docs/COMPLIANCE_MAPPING.md)
 [![Checkov Audit](https://img.shields.io/badge/Checkov%20IaC-166%20Passed%20%7C%200%20Failed-success?style=for-the-badge&logo=paloaltonetworks)](docs/EVIDENCE.md)
-[![Target Role](https://img.shields.io/badge/Target%20Role-Cloud%20Security%20Engineer%20%40%20Property%20Finder-orange?style=for-the-badge&logo=target)](docs/THREAT_MODEL_STRIDE.md)
 
 ---
 
 ## 1. Executive Overview
 
-**PF-Shield** is a production-grade, cost-optimized AWS cloud security control plane and automated incident response (SOAR) platform engineered for **Property Finder** in the **United Arab Emirates (UAE)**.
+**PF-Shield** is a production-grade, cost-optimized AWS cloud security control plane and automated incident response (SOAR) platform engineered for cloud-native real estate platforms in the **United Arab Emirates (UAE)**.
 
-Property Finder handles millions of property listings and tens of thousands of sensitive broker and tenant identity documents (Emirates IDs, passport scans, and RERA title deeds). Securing these assets requires reconciling two competing business demands:
+Real estate platforms handle millions of property listings and tens of thousands of sensitive broker and tenant identity documents (Emirates IDs, passport scans, and RERA title deeds). Securing these assets requires reconciling two competing operational demands:
 1. **Uncompromising Zero-Trust Security & Sovereign Compliance**: Strict alignment with **UAE Personal Data Protection Law (PDPL - Federal Decree-Law No. 45 of 2021)** data residency mandates in region `me-central-1`, ISO/IEC 27001:2022 Annex A, and SOC 2 Type II trust services criteria.
 2. **Aggressive FinOps Cost Optimization**: Delivering a full security control plane — encompassing IAM permission boundaries, triple-deny data perimeters, envelope encryption, automated threat containment (< 1.5s MTTR), observability, and shift-left Kubernetes policies — at an idle run rate of **$0.00 – $1.10 / month**, compared to a naive enterprise deployment costing **$165+/month**.
 
@@ -46,7 +45,7 @@ Property Finder handles millions of property listings and tens of thousands of s
 - [`scripts/`](scripts/): Attack simulation runner (`simulate_attack.sh`), regional service parity verifier (`verify_region_services.sh`), and diagram generator (`generate_architecture_diagram.py`).
 - [`docs/`](docs/): Complete governance documentation:
   - [`docs/EVIDENCE.md`](docs/EVIDENCE.md): Auditable verification proofs and terminal failure screenshots for every section.
-  - [`docs/THREAT_MODEL_STRIDE.md`](docs/THREAT_MODEL_STRIDE.md): Comprehensive STRIDE threat model mapped to Property Finder assets.
+  - [`docs/THREAT_MODEL_STRIDE.md`](docs/THREAT_MODEL_STRIDE.md): Comprehensive STRIDE threat model mapped to real estate platform assets.
   - [`docs/COMPLIANCE_MAPPING.md`](docs/COMPLIANCE_MAPPING.md): Regulatory matrix mapping to UAE PDPL, ISO 27001, and SOC 2.
   - [`docs/WELL_ARCHITECTED_REVIEW.md`](docs/WELL_ARCHITECTED_REVIEW.md): Detailed 6-pillar Well-Architected Framework review.
   - [`docs/REGIONAL_SERVICE_AVAILABILITY.md`](docs/REGIONAL_SERVICE_AVAILABILITY.md): `me-central-1` vs `me-south-1` feature parity audit.
@@ -58,7 +57,7 @@ Property Finder handles millions of property listings and tens of thousands of s
 
 ![PF-Shield Architecture Overview](docs/architecture-overview.png)
 
-*Figure 1: High-resolution Lucidchart-style cloud architecture diagram generated via Python `diagrams` using official AWS and CNCF vector icons. Depicts zero-trust boundaries, private VPC Gateway Endpoints, edge anti-scraping, and event-driven SOAR automation.*
+*Figure 1: PF-Shield Zero-Trust Cloud Architecture.*
 
 ---
 
@@ -71,7 +70,7 @@ Property Finder handles millions of property listings and tens of thousands of s
 | **Edge API Layer** | **API Gateway HTTP API (v2)** | API Gateway REST API, Application Load Balancer | 70% cheaper than REST API; native stage burst rate limiting (50 burst / 25 rate) provides $0 anti-scraping. | Lacks request validation mapping templates (handled within Lambda application code). |
 | **Data Encryption** | **KMS CMK + S3 Bucket Keys** | AWS Managed Key (`aws/s3`), Client-Side Encryption | Fulfills UAE PDPL Art. 13 cryptographic separation; S3 Bucket Keys reduce KMS request fees by 99%. | Incurs a baseline $1.00/month fee for the Customer Managed Key. |
 | **Event Routing** | **Amazon EventBridge** | CloudWatch Logs Metric Filters, SNS Fanout | Native content filtering on CloudTrail and GuardDuty schemas; decoupled, declarative JSON event rules. | EventBridge bus adds up to ~1.5s latency compared to synchronous webhooks. |
-| **Container Governance** | **Kyverno Policy-as-Code (CI CLI)** | Live EKS Cluster + OPA Gatekeeper | Proves Kubernetes security mastery without paying $73.00/month for an idle EKS control plane. | Policies validated at build time in CI rather than live admission webhook enforcement. |
+| **Container Governance** | **Kyverno Policy-as-Code (CI CLI)** | Live EKS Cluster + OPA Gatekeeper | Validates Kubernetes security policies shift-left without incurring $73.00/month for an idle EKS control plane. | Policies validated at build time in CI rather than live admission webhook enforcement. |
 
 ---
 
@@ -177,7 +176,7 @@ make simulate-attack
 
 ## 7. Production Incident Post-Mortems
 
-In accordance with portfolio repository standards, technical challenges encountered during implementation are documented with full terminal failure screenshots in [docs/EVIDENCE.md](docs/EVIDENCE.md#7-comprehensive-incident-post-mortem-log):
+Technical challenges encountered during implementation are documented below and in [docs/EVIDENCE.md](docs/EVIDENCE.md#7-comprehensive-incident-post-mortem-log):
 
 ### Incident 1: S3 Bucket Lifecycle Configuration Rule Filter Deprecation
 - **Symptoms**: `Warning: Invalid Attribute Combination: No attribute specified when one of [filter, prefix] is required`.
@@ -212,5 +211,4 @@ make destroy
 ## 9. Author & License
 
 - **Author**: Yousef Osama
-- **Target Role**: Cloud Security Engineer — Property Finder (UAE / Middle East)
 - **License**: MIT License

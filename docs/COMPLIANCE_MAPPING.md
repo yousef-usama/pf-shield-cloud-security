@@ -2,7 +2,7 @@
 
 ## Regulatory Context & Applicable Standards
 
-As a premier real estate technology platform operating in the United Arab Emirates, Property Finder is subject to strict data sovereignty, privacy, and cybersecurity standards:
+As a premier cloud-native real estate technology platform operating in the United Arab Emirates, PF-Shield is designed to satisfy strict data sovereignty, privacy, and cybersecurity standards:
 1. **UAE Personal Data Protection Law (PDPL - Federal Decree-Law No. 45 of 2021)**
 2. **ISO/IEC 27001:2022 Information Security Management System (ISMS) Annex A**
 3. **AICPA SOC 2 Type II Trust Services Criteria (Security & Confidentiality)**

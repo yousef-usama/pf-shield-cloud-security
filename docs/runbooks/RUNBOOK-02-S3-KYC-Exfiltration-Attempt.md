@@ -79,9 +79,9 @@ Under UAE Federal Decree-Law No. 45 of 2021 Article 14:
 
 ```text
 To: UAE Data Office (compliance@dataoffice.gov.ae)
-Subject: Incident Notification under Federal Decree-Law No. 45 of 2021 — Property Finder
+Subject: Incident Notification under Federal Decree-Law No. 45 of 2021 — Real Estate Platform
 
-1. Data Controller Name: Property Finder (UAE)
+1. Data Controller Name: PF-Shield Real Estate Platform (UAE)
 2. Incident Timestamp: YYYY-MM-DD HH:MM UTC
 3. Containment Timestamp: YYYY-MM-DD HH:MM UTC (SOAR MTTR: <X> seconds)
 4. Nature & Description of Incident:

@@ -2,7 +2,7 @@
 
 ![PF-Shield Architecture Hero](architecture-overview.png)
 
-This document provides auditable verification proofs, live security isolation tests, and automated compliance records for the **PF-Shield** cloud security platform in region `me-central-1` (UAE). In accordance with portfolio repository standards, **every section contains embedded visual screenshot evidence** validating the live system state.
+This document provides auditable verification proofs, live security isolation tests, and automated compliance records for the **PF-Shield** cloud security platform in region `me-central-1` (UAE), with terminal and system outputs validating the live system state.
 
 ---
 
@@ -94,7 +94,7 @@ When an authorized identity (KYC Lambda role or internal broker workload) access
 
 ## 7. Comprehensive Incident Post-Mortem Log
 
-In accordance with portfolio repository standards, real-world deployment obstacles and configuration bugs encountered during development are documented below as blameless post-mortems with raw terminal error captures.
+Real-world deployment obstacles and configuration bugs encountered during development are documented below as blameless post-mortems with raw terminal error captures.
 
 ### Incident 1: S3 Bucket Lifecycle Configuration Rule Filter Deprecation Warning
 

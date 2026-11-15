@@ -50,7 +50,7 @@ cluster_attr = {
 }
 
 with Diagram(
-    "PF-Shield: Well-Architected Zero-Trust Real Estate API & Cloud SOAR",
+    "PF-Shield: Zero-Trust Real Estate API & Automated Cloud SOAR",
     show=False,
     filename=output_path,
     outformat="png",

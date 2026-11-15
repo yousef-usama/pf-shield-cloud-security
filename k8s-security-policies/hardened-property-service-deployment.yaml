@@ -44,7 +44,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: property-service
-          image: ghcr.io/propertyfinder/property-service:1.4.2@sha256:7f017120a32432a537f2a1b94e82df4b759604313f8373b9e59d95d82084c688
+          image: ghcr.io/pf-shield/property-service:1.4.2@sha256:7f017120a32432a537f2a1b94e82df4b759604313f8373b9e59d95d82084c688
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

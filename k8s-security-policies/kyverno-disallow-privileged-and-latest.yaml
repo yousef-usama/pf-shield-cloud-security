@@ -8,7 +8,7 @@ metadata:
     policies.kyverno.io/severity: High
     policies.kyverno.io/description: >-
       Enforces container isolation by blocking privileged containers, host namespaces,
-      and non-deterministic ':latest' image tags across Property Finder workloads.
+      and non-deterministic ':latest' image tags across production workloads.
 spec:
   validationFailureAction: Enforce
   background: true

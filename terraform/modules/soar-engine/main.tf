@@ -296,7 +296,7 @@ resource "aws_cloudwatch_log_group" "s3_lockdown_logs" {
 resource "aws_lambda_function" "s3_lockdown" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue configured below via dead_letter_config block
   #checkov:skip=CKV_AWS_117: Lambda is intentionally non-VPC to avoid expensive VPC NAT gateways and reach IAM/SNS directly
-  #checkov:skip=CKV_AWS_272: Code signing omitted for demo/portfolio architecture
+  #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
   function_name                  = "pf-soar-s3-lockdown-${var.environment}"
   role                           = aws_iam_role.s3_lockdown_role.arn
   handler                        = "playbook_s3_lockdown.lambda_handler"
@@ -404,7 +404,7 @@ resource "aws_cloudwatch_log_group" "iam_quarantine_logs" {
 resource "aws_lambda_function" "iam_quarantine" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue configured below via dead_letter_config block
   #checkov:skip=CKV_AWS_117: Lambda is intentionally non-VPC to avoid expensive VPC NAT gateways and reach IAM/SNS directly
-  #checkov:skip=CKV_AWS_272: Code signing omitted for demo/portfolio architecture
+  #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
   function_name                  = "pf-soar-iam-quarantine-${var.environment}"
   role                           = aws_iam_role.iam_quarantine_role.arn
   handler                        = "playbook_iam_quarantine.lambda_handler"

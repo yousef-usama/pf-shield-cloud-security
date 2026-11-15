@@ -88,7 +88,7 @@
 
 ### Phase 4: Recovery & Restoration
 1. Rotate credentials following enterprise password/MFA protocols.
-2. Detach `pf-soar-quarantine-deny-all` ONLY after root-cause analysis is signed off by the Lead Cloud Security Engineer.
+2. Detach `pf-soar-quarantine-deny-all` ONLY after root-cause analysis is signed off by the Lead Security Engineer or Incident Commander.
 3. Validate that workload Permission Boundaries remain intact.
 
 ---

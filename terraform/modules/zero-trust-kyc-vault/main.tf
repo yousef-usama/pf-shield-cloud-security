@@ -21,7 +21,7 @@ locals {
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_vpc" "kyc_vpc" {
-  #checkov:skip=CKV2_AWS_11: VPC Flow Logs disabled to maintain $0.00 idle cost guardrail on portfolio simulation
+  #checkov:skip=CKV2_AWS_11: VPC Flow Logs disabled to maintain $0.00 idle cost guardrail
   #checkov:skip=CKV2_AWS_12: Default security group restricted with zero inbound/outbound rules
   cidr_block           = "10.20.0.0/16"
   enable_dns_hostnames = true

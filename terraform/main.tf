@@ -1,6 +1,6 @@
 # =====================================================================================================================
 # PF-SHIELD CLUSTER & INFRASTRUCTURE ROOT MODULE
-# Property Finder UAE Cloud Security Control Plane & Zero-Trust Architecture
+# PF-Shield UAE Cloud Security Control Plane & Zero-Trust Architecture
 # =====================================================================================================================
 
 # 1. IAM Permission Boundaries & Zero-Trust Identity Guardrails

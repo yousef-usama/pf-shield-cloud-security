@@ -29,7 +29,7 @@ provider "aws" {
 
 locals {
   # Documentation of verified regional service availability between UAE (me-central-1) and Bahrain (me-south-1).
-  # Used to document architectural trade-offs and provide interview-ready regional verification rationale.
+  # Used to document architectural trade-offs and provide regional verification rationale.
   regional_service_availability_matrix = {
     primary_region  = var.aws_region
     fallback_region = var.fallback_region

@@ -52,6 +52,6 @@ If an enterprise client or auditing body requires an AWS service configuration n
 
 ---
 
-## 4. Interview Talking Point: Proactive Regional Validation
+## 4. Architectural Rationale: Proactive Regional Validation
 
-> *"In the UAE market, junior engineers frequently deploy to `us-east-1` because tutorials use it, directly violating UAE Personal Data Protection Law (Federal Decree-Law No. 45 of 2021). Senior security engineers validate regional service availability before writing a line of Terraform, map residency controls into IAM permission boundaries, and build automated verification scripts like `scripts/verify_region_services.sh` into the deployment toolchain."*
+In regional cloud deployments subject to data sovereignty mandates such as UAE Federal Decree-Law No. 45 of 2021, default region assumptions (e.g., `us-east-1`) introduce severe non-compliance risks. The PF-Shield architecture validates regional service availability before infrastructure provisioning, maps residency controls directly into IAM permission boundaries, and enforces automated pre-flight verification scripts (`scripts/verify_region_services.sh`) within the deployment toolchain.

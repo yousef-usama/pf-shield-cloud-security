@@ -63,7 +63,7 @@ flowchart TD
 
 ## 3. Monthly Cost Comparison Table: Naive Architecture vs PF-Shield
 
-| Component | Naive Architecture (Typical Candidate) | PF-Shield Well-Architected Implementation | Monthly Savings |
+| Component | Naive Enterprise Architecture | PF-Shield Well-Architected Implementation | Monthly Savings |
 | :--- | :--- | :--- | :--- |
 | **Outbound VPC Networking** | 1x AWS NAT Gateway in Private Subnet:<br>• Hourly fee: $0.045 * 730 hrs = **$32.85/mo**<br>• Data processing: ~$2.50/mo | **VPC Gateway Endpoints** for S3 and DynamoDB:<br>• Hourly fee: **$0.00**<br>• Data processing: **$0.00** | **-$35.35/mo** (100% savings) |
 | **Compute / API Layer** | 2x `t3.medium` EC2 instances or EKS NodeGroup:<br>• Compute: 2 * $30.37 = **$60.74/mo**<br>• EBS GP3 volumes: **$10.00/mo** | **Serverless-First (API GW + Lambda arm64)**:<br>• API Gateway HTTP API: $0.00 (within 1M free tier)<br>• Lambda Graviton2: $0.00 (within 3.2M sec free tier) | **-$70.74/mo** (100% savings) |

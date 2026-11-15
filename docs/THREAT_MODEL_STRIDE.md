@@ -2,9 +2,9 @@
 
 ## 1. Executive Summary & Context
 
-This threat model analyzes the security posture of **PF-Shield**, a zero-trust real estate API and automated incident response (SOAR) architecture designed for **Property Finder** in the **United Arab Emirates (UAE)** (`me-central-1`). 
+This threat model analyzes the security posture of **PF-Shield**, an enterprise zero-trust real estate API and automated incident response (SOAR) architecture deployed in the **United Arab Emirates (UAE)** (`me-central-1`). 
 
-Property Finder operates critical services handling both proprietary market data (property listings) and highly confidential personal data (broker and tenant Emirates IDs, passports, and title deeds). The threat model evaluates threats against these two core workloads under the Microsoft STRIDE framework:
+The platform operates critical services handling both proprietary market data (property listings) and highly confidential personal data (broker and tenant Emirates IDs, passports, and title deeds). The threat model evaluates threats against these two core workloads under the Microsoft STRIDE framework:
 1. **Public Property Listings API (`GET /api/v1/properties`)**: Subject to high-frequency competitor scraping, distributed denial-of-service, and OWASP Top 10 API attacks.
 2. **Broker KYC Document Vault (`POST /api/v1/kyc/presign`)**: Subject to targeted identity exfiltration, unauthorized cross-account access, and privilege escalation.
 

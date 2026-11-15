@@ -2,7 +2,7 @@
 """PF-Shield: Professional Terminal Screenshot Generator for docs/EVIDENCE.md.
 
 Renders dark-themed, crisp terminal captures with macOS-style window controls
-and syntax-highlighted CLI outputs satisfying portfolio-repo-standards.
+and syntax-highlighted CLI outputs.
 """
 
 import os
