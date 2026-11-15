@@ -27,9 +27,10 @@ module "zero_trust_kyc_vault" {
   aws_region  = var.aws_region
   environment = var.environment
 
-  # Pre-allow roles that will be deployed in subsequent phases
+  # Pre-allow roles that require S3 access through the data perimeter
   allowed_principal_arns = [
-    module.soar_engine.s3_lockdown_role_arn
+    module.soar_engine.s3_lockdown_role_arn,
+    module.edge_api_waf.kyc_vault_role_arn
   ]
 }
 
@@ -55,4 +56,32 @@ module "secrets" {
   quarantine_policy_arn = module.iam_boundaries.quarantine_policy_arn
   kyc_vault_bucket_arn  = module.zero_trust_kyc_vault.kyc_vault_bucket_arn
   sns_topic_arn         = module.soar_engine.security_incidents_sns_topic_arn
+}
+
+# 6. Edge API Gateway & Anti-Scraping WAF Protection
+module "edge_api_waf" {
+  source = "./modules/edge-api-waf"
+
+  aws_region              = var.aws_region
+  environment             = var.environment
+  permission_boundary_arn = module.iam_boundaries.permission_boundary_arn
+  kms_key_arn             = module.zero_trust_kyc_vault.kms_key_arn
+  dynamodb_table_name     = module.zero_trust_kyc_vault.dynamodb_table_name
+  kyc_vault_bucket_name   = module.zero_trust_kyc_vault.kyc_vault_bucket_name
+  enable_waf              = var.enable_waf
+}
+
+# 7. Observability, Security Ops Dashboard & Metric Alarms
+module "observability" {
+  source = "./modules/observability"
+
+  environment                = var.environment
+  api_id                     = module.edge_api_waf.api_id
+  s3_lockdown_lambda_name    = module.soar_engine.s3_lockdown_lambda_name
+  iam_quarantine_lambda_name = module.soar_engine.iam_quarantine_lambda_name
+  s3_lockdown_dlq_name       = module.soar_engine.s3_lockdown_dlq_name
+  iam_quarantine_dlq_name    = module.soar_engine.iam_quarantine_dlq_name
+  kyc_vault_bucket_name      = module.zero_trust_kyc_vault.kyc_vault_bucket_name
+  sns_topic_arn              = module.soar_engine.security_incidents_sns_topic_arn
+  enable_dashboard           = var.enable_observability_dashboard
 }

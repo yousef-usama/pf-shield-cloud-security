@@ -61,3 +61,23 @@ output "cloudtrail_audit_trail_arn" {
   description = "The ARN of the multi-region management event CloudTrail"
   value       = module.soar_engine.cloudtrail_arn
 }
+
+output "edge_api_endpoint" {
+  description = "The public base URL endpoint for the PF-Shield Edge HTTP API"
+  value       = module.edge_api_waf.api_endpoint
+}
+
+output "edge_api_properties_route" {
+  description = "Full URL for the public property listings endpoint"
+  value       = "${module.edge_api_waf.api_endpoint}/api/v1/properties"
+}
+
+output "edge_api_kyc_presign_route" {
+  description = "Full URL for the broker KYC presign upload endpoint"
+  value       = "${module.edge_api_waf.api_endpoint}/api/v1/kyc/presign"
+}
+
+output "observability_dashboard_name" {
+  description = "Name of the CloudWatch Security Operations dashboard"
+  value       = module.observability.dashboard_name
+}
