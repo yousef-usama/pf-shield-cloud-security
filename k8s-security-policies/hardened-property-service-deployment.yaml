@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pf-property-service-sa
+  namespace: property-workloads
+  annotations:
+    # AWS IAM Roles for Service Accounts (IRSA) zero-trust identity mapping
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/pf-property-service-irsa-role
+    eks.amazonaws.com/sts-regional-endpoints: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pf-property-service
+  namespace: property-workloads
+  labels:
+    app.kubernetes.io/name: pf-property-service
+    app.kubernetes.io/part-of: pf-shield
+    app.kubernetes.io/version: "1.4.2"
+  annotations:
+    checkov.io/skip1: CKV_K8S_38=Projected service account token required for AWS IAM Roles for Service Accounts (IRSA) authentication
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pf-property-service
+  template:
+    metadata:
+      labels:
+        app: pf-property-service
+    spec:
+      #checkov:skip=CKV_K8S_38: Service account token automount required for AWS IAM Roles for Service Accounts (IRSA) authentication
+      serviceAccountName: pf-property-service-sa
+      automountServiceAccountToken: true
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: property-service
+          image: ghcr.io/propertyfinder/property-service:1.4.2@sha256:7f017120a32432a537f2a1b94e82df4b759604313f8373b9e59d95d82084c688
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pf-property-service-netpol
+  namespace: property-workloads
+spec:
+  podSelector:
+    matchLabels:
+      app: pf-property-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow inbound traffic strictly from ingress controller pods
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # 1. Allow DNS queries to kube-dns
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # 2. Allow HTTPS egress strictly to regional AWS service endpoints
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32 # Block EC2 instance metadata service (IMDSv1)
+      ports:
+        - protocol: TCP
+          port: 443

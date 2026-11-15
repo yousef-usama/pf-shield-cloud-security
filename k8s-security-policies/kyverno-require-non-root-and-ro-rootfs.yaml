@@ -1,0 +1,67 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root-and-ro-rootfs
+  annotations:
+    policies.kyverno.io/title: Require Non-Root User and Read-Only Root Filesystem
+    policies.kyverno.io/category: Pod Security Standards (Restricted)
+    policies.kyverno.io/severity: High
+    policies.kyverno.io/description: >-
+      Enforces defense-in-depth by requiring container execution as an unprivileged UID,
+      a read-only root filesystem to prevent runtime payload persistence, and dropping ALL Linux capabilities.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+      validate:
+        message: "Containers must execute as a non-root user (runAsNonRoot: true)."
+        pattern:
+          spec:
+            =(template):
+              spec:
+                =(securityContext):
+                  runAsNonRoot: true
+                containers:
+                  - =(securityContext):
+                      runAsNonRoot: true
+    - name: require-readonly-root-filesystem
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+      validate:
+        message: "Root filesystem must be read-only (readOnlyRootFilesystem: true)."
+        pattern:
+          spec:
+            =(template):
+              spec:
+                containers:
+                  - securityContext:
+                      readOnlyRootFilesystem: true
+    - name: require-drop-all-capabilities
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+      validate:
+        message: "Containers must drop ALL Linux kernel capabilities."
+        pattern:
+          spec:
+            =(template):
+              spec:
+                containers:
+                  - securityContext:
+                      capabilities:
+                        drop:
+                          - ALL

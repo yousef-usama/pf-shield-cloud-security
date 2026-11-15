@@ -1,0 +1,63 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-and-latest
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers and Latest Tag
+    policies.kyverno.io/category: Pod Security Standards (Restricted)
+    policies.kyverno.io/severity: High
+    policies.kyverno.io/description: >-
+      Enforces container isolation by blocking privileged containers, host namespaces,
+      and non-deterministic ':latest' image tags across Property Finder workloads.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-privileged-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+      validate:
+        message: "Privileged mode and privilege escalation are strictly forbidden."
+        pattern:
+          spec:
+            =(template):
+              spec:
+                =(containers):
+                  - =(securityContext):
+                      =(privileged): "false"
+                      allowPrivilegeEscalation: false
+    - name: validate-host-namespaces
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+      validate:
+        message: "Sharing host network, PID, or IPC namespaces is forbidden."
+        pattern:
+          spec:
+            =(template):
+              spec:
+                =(hostNetwork): "false"
+                =(hostPID): "false"
+                =(hostIPC): "false"
+    - name: validate-image-tag-not-latest
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+      validate:
+        message: "Containers must use immutable, pinned semantic versions or digests, not ':latest'."
+        pattern:
+          spec:
+            =(template):
+              spec:
+                containers:
+                  - image: "!*:latest"
