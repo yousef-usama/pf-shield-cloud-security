@@ -1,0 +1,45 @@
+{
+  "version": "0",
+  "id": "c8b1a329-8e42-4f11-9a73-67891234abcd",
+  "detail-type": "AWS API Call via CloudTrail",
+  "source": "aws.s3",
+  "account": "123456789012",
+  "time": "2026-11-15T12:05:00Z",
+  "region": "me-central-1",
+  "resources": [],
+  "detail": {
+    "eventVersion": "1.08",
+    "userIdentity": {
+      "type": "IAMUser",
+      "principalId": "AIDAEXAMPLEUSERID456",
+      "arn": "arn:aws:iam::123456789012:user/malicious-insider-user",
+      "accountId": "123456789012",
+      "accessKeyId": "AKIAEXAMPLEKEYID789",
+      "userName": "malicious-insider-user"
+    },
+    "eventTime": "2026-11-15T12:05:00Z",
+    "eventSource": "s3.amazonaws.com",
+    "eventName": "PutBucketPublicAccessBlock",
+    "awsRegion": "me-central-1",
+    "sourceIPAddress": "203.0.113.88",
+    "userAgent": "aws-cli/2.15.0 Python/3.11.6 Darwin/23.0.0",
+    "requestParameters": {
+      "bucketName": "pf-kyc-vault-prod-sim",
+      "PublicAccessBlockConfiguration": {
+        "xmlns": "http://s3.amazonaws.com/doc/2006-03-01/",
+        "BlockPublicAcls": false,
+        "IgnorePublicAcls": false,
+        "BlockPublicPolicy": false,
+        "RestrictPublicBuckets": false
+      }
+    },
+    "responseElements": null,
+    "requestID": "EXAMPLEREQUESTID123",
+    "eventID": "EXAMPLEEVENTID456",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "123456789012",
+    "eventCategory": "Management"
+  }
+}

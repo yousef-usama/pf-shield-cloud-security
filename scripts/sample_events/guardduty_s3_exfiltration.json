@@ -1,0 +1,59 @@
+{
+  "version": "0",
+  "id": "e2a39b40-7f28-4e8c-8472-8812cfa99101",
+  "detail-type": "GuardDuty Finding",
+  "source": "aws.guardduty",
+  "account": "123456789012",
+  "time": "2026-11-15T12:00:00Z",
+  "region": "me-central-1",
+  "resources": [],
+  "detail": {
+    "schemaVersion": "2.0",
+    "accountId": "123456789012",
+    "region": "me-central-1",
+    "type": "Exfiltration:S3/MaliciousIPCaller",
+    "severity": 8.0,
+    "createdAt": "2026-11-15T11:59:45.000Z",
+    "updatedAt": "2026-11-15T12:00:00.000Z",
+    "title": "Unusual volume of S3 GetObject calls from a known malicious IP address.",
+    "description": "An unusual number of S3 GetObject API calls were made to bucket pf-kyc-vault-prod-sim from IP address 198.51.100.24 associated with known threat actor infrastructure.",
+    "resource": {
+      "resourceType": "S3Bucket",
+      "s3BucketDetails": [
+        {
+          "arn": "arn:aws:s3:::pf-kyc-vault-prod-sim",
+          "name": "pf-kyc-vault-prod-sim",
+          "type": "Destination"
+        }
+      ],
+      "accessKeyDetails": {
+        "accessKeyId": "ASIAEXAMPLEKEYID123",
+        "principalId": "AROAEXAMPLEPRINCIPAL",
+        "userName": "compromised-broker-service-role",
+        "userType": "Role"
+      }
+    },
+    "service": {
+      "serviceName": "guardduty",
+      "detectorId": "d4a1b8c9e0f1234567890abcdef12345",
+      "action": {
+        "actionType": "AWS_API_CALL",
+        "awsApiCallAction": {
+          "api": "GetObject",
+          "serviceName": "s3.amazonaws.com",
+          "callerType": "Remote IP",
+          "remoteIpDetails": {
+            "ipAddressV4": "198.51.100.24",
+            "organization": {
+              "asn": "64496",
+              "asnOrg": "Malicious Exfiltration Host"
+            },
+            "country": {
+              "countryName": "Unknown"
+            }
+          }
+        }
+      }
+    }
+  }
+}
