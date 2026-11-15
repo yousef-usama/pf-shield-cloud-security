@@ -1,12 +1,13 @@
 SHELL := /bin/bash
-.PHONY: help test scan fmt validate plan deploy simulate-attack destroy clean
+.PHONY: help test scan fmt validate plan deploy simulate-attack destroy clean diagram
 
 help:
 	@echo "PF-Shield Cloud Security Automation Targets:"
-	@echo "  make fmt              - Format Terraform and Python code"
-	@echo "  make validate         - Validate Terraform configurations"
+	@echo "  make fmt              - Format Terraform configurations"
+	@echo "  make validate         - Validate Terraform syntax and configurations"
 	@echo "  make test             - Execute unit tests for Python SOAR playbooks (pytest + moto)"
 	@echo "  make scan             - Run security and policy-as-code scanners (Checkov)"
+	@echo "  make diagram          - Generate Lucidchart-style architecture diagram"
 	@echo "  make plan             - Generate Terraform execution plan"
 	@echo "  make deploy           - Apply Terraform configuration (me-central-1)"
 	@echo "  make simulate-attack  - Execute automated attack injection script against EventBridge"
@@ -15,17 +16,20 @@ help:
 
 fmt:
 	terraform -chdir=terraform fmt -recursive
-	@if command -v black >/dev/null 2>&1; then black src/; fi
 
 validate:
 	terraform -chdir=terraform init -backend=false
 	terraform -chdir=terraform validate
 
 test:
-	pytest src/tests/ -v --tb=short
+	./.venv/bin/pytest src/tests/ -v --tb=short
 
 scan:
-	checkov -d terraform/ --framework terraform
+	/Users/Yousef/.local/bin/checkov -d terraform/ --framework terraform --quiet
+	/Users/Yousef/.local/bin/checkov -d k8s-security-policies/ --framework kubernetes --quiet
+
+diagram:
+	./scripts/generate-diagram.sh
 
 plan:
 	terraform -chdir=terraform plan -out=tfplan
