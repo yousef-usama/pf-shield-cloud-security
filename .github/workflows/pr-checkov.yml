@@ -1,0 +1,58 @@
+name: PR Terraform Security Gate (Checkov)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "terraform/**"
+      - "terraform-bootstrap/**"
+      - ".github/workflows/pr-checkov.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  checkov-pr-scan:
+    name: Checkov Terraform Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Pull Request Branch
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Verify Terraform Formatting
+        run: |
+          echo "Verifying Terraform code formatting..."
+          terraform -chdir=terraform fmt -check -recursive
+          if [ -d "terraform-bootstrap" ]; then
+            terraform -chdir=terraform-bootstrap fmt -check -recursive
+          fi
+
+      - name: Validate Terraform Syntax & Modules
+        run: |
+          echo "Validating main Terraform configuration..."
+          terraform -chdir=terraform init -backend=false
+          terraform -chdir=terraform validate
+
+      - name: Run Checkov Static Analysis (Main Infrastructure)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          framework: terraform
+          directory: terraform/
+          output_format: cli
+          soft_fail: false
+
+      - name: Run Checkov Static Analysis (Bootstrap Infrastructure)
+        if: hashFiles('terraform-bootstrap/**') != ''
+        uses: bridgecrewio/checkov-action@master
+        with:
+          framework: terraform
+          directory: terraform-bootstrap/
+          output_format: cli
+          soft_fail: false

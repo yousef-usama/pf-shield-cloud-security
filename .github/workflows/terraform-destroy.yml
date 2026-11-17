@@ -1,0 +1,69 @@
+name: Manual Terraform Destroy (1-Click Teardown)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment to destroy"
+        required: true
+        default: "prod-sim"
+        type: choice
+        options:
+          - prod-sim
+          - dev
+          - staging
+      confirmation:
+        description: "Type 'destroy' to confirm resource teardown"
+        required: true
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  manual-destroy:
+    name: 1-Click Infrastructure Teardown
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Teardown Safety Latch
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "destroy" ]; then
+            echo "::error::Teardown aborted! You must explicitly type 'destroy' in the confirmation input."
+            exit 1
+          fi
+          echo "Teardown safety confirmation verified for environment: ${{ github.event.inputs.environment }}"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC Keyless)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: me-central-1
+          audience: sts.amazonaws.com
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Initialize Terraform with Remote Backend
+        run: |
+          echo "Initializing Terraform backend..."
+          terraform -chdir=terraform init
+
+      - name: Execute Terraform Destroy
+        run: |
+          echo "Executing automated teardown on ${{ github.event.inputs.environment }}..."
+          terraform -chdir=terraform destroy -auto-approve \
+            -var="environment=${{ github.event.inputs.environment }}"
+        env:
+          TF_IN_AUTOMATION: "true"
+
+      - name: Teardown Summary
+        run: |
+          echo "### Teardown Complete :wastebasket:" >> $GITHUB_STEP_SUMMARY
+          echo "All provisioned resources in environment **${{ github.event.inputs.environment }}** have been decommissioned." >> $GITHUB_STEP_SUMMARY
+          echo "Idle spend returned to \$0.00/month." >> $GITHUB_STEP_SUMMARY

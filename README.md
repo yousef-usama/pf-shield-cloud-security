@@ -31,6 +31,7 @@ Real estate platforms handle millions of property listings and tens of thousands
 
 ### Repository Directory Map
 - [`terraform/`](terraform/): 100% modular Infrastructure-as-Code root configuration.
+  - [`terraform/backend.tf`](terraform/backend.tf): Remote state configuration backed by S3 and DynamoDB state locking.
   - [`terraform/modules/iam-boundaries/`](terraform/modules/iam-boundaries/): Regional permission boundaries (`me-central-1`) and emergency quarantine deny-all policies.
   - [`terraform/modules/finops-budget/`](terraform/modules/finops-budget/): AWS Budgets configuration capping spend at $5.00/mo with proactive alerting.
   - [`terraform/modules/zero-trust-kyc-vault/`](terraform/modules/zero-trust-kyc-vault/): Private VPC, $0.00 S3/DynamoDB Gateway Endpoints, KMS CMK, and S3 Bucket Keys.
@@ -38,11 +39,20 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`terraform/modules/soar-engine/`](terraform/modules/soar-engine/): Multi-region CloudTrail, EventBridge rules, SQS DLQs, and auto-remediation Lambdas.
   - [`terraform/modules/observability/`](terraform/modules/observability/): CloudWatch Security Operations dashboard and proactive DLQ/error alarms.
   - [`terraform/modules/secrets/`](terraform/modules/secrets/): SSM Parameter Store (SecureString) encrypted with KMS CMK.
+- [`terraform-bootstrap/`](terraform-bootstrap/): Isolated one-time bootstrap config provisioning GitHub Actions OIDC identity provider and IAM deployer role.
+- [`.github/workflows/`](.github/workflows/): Complete CI/CD and automation suites:
+  - [`devsecops-pipeline.yml`](.github/workflows/devsecops-pipeline.yml): Push pipeline running SOAR unit tests, full IaC scan, and Kyverno K8s policies.
+  - [`pr-checkov.yml`](.github/workflows/pr-checkov.yml): Targeted PR gate running Checkov static analysis on any Terraform changes.
+  - [`terraform-destroy.yml`](.github/workflows/terraform-destroy.yml): Manual-dispatch 1-click teardown workflow for zero idle cost decommissioning.
 - [`src/app/`](src/app/): Application handlers (`property_api_handler.py` and `kyc_vault_handler.py`).
 - [`src/soar/`](src/soar/): Automated incident response playbooks (`playbook_s3_lockdown.py` and `playbook_iam_quarantine.py`).
 - [`src/tests/`](src/tests/): Automated unit test suite using `pytest` and `moto` AWS mocks.
 - [`k8s-security-policies/`](k8s-security-policies/): Kyverno ClusterPolicies and hardened Kubernetes manifests demonstrating shift-left container security.
-- [`scripts/`](scripts/): Attack simulation runner (`simulate_attack.sh`), regional service parity verifier (`verify_region_services.sh`), and diagram generator (`generate_architecture_diagram.py`).
+- [`scripts/`](scripts/): Automation scripts:
+  - [`bootstrap-remote-state.sh`](scripts/bootstrap-remote-state.sh): One-time AWS CLI bootstrap for S3 remote state bucket and DynamoDB lock table.
+  - [`simulate_attack.sh`](scripts/simulate_attack.sh): EventBridge attack simulation runner.
+  - [`verify_region_services.sh`](scripts/verify_region_services.sh): Regional service parity verifier (`me-central-1` vs `me-south-1`).
+  - [`generate_architecture_diagram.py`](scripts/generate_architecture_diagram.py): Visual architecture diagram generator.
 - [`docs/`](docs/): Complete governance documentation:
   - [`docs/EVIDENCE.md`](docs/EVIDENCE.md): Auditable verification proofs and terminal failure screenshots for every section.
   - [`docs/THREAT_MODEL_STRIDE.md`](docs/THREAT_MODEL_STRIDE.md): Comprehensive STRIDE threat model mapped to real estate platform assets.
@@ -135,7 +145,109 @@ When an unauthorized identity attempts S3 public access exposure or IAM privileg
 - Terraform `>= 1.6.0`.
 - Python `>= 3.12` and `make`.
 
-### Quickstart Execution (1-Command Verification)
+---
+
+### Step 0: One-Time Bootstrap (Run Once Prior to First Deploy)
+
+#### 0.1 Remote State Bootstrap (S3 + DynamoDB via AWS CLI)
+To avoid the architectural **chicken-and-egg problem** (where Terraform cannot store its state in an S3 bucket that it has not yet provisioned), the remote state backend is initialized externally via AWS CLI.
+
+Run the provided automated bootstrap script:
+```bash
+./scripts/bootstrap-remote-state.sh me-central-1
+# Or via Makefile:
+make bootstrap-state
+```
+
+<details>
+<summary><b>Click to view the raw manual AWS CLI commands</b></summary>
+
+```bash
+# Variables
+AWS_REGION="me-central-1"
+ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+BUCKET_NAME="pf-shield-tfstate-${ACCOUNT_ID}"
+TABLE_NAME="pf-shield-tf-locks"
+
+# 1. Create S3 Bucket in me-central-1
+aws s3api create-bucket \
+  --bucket "${BUCKET_NAME}" \
+  --region "${AWS_REGION}" \
+  --create-bucket-configuration LocationConstraint="${AWS_REGION}"
+
+# 2. Enable S3 Bucket Versioning
+aws s3api put-bucket-versioning \
+  --bucket "${BUCKET_NAME}" \
+  --versioning-configuration Status=Enabled
+
+# 3. Enable Default Encryption (SSE-S3 + Bucket Keys for FinOps)
+aws s3api put-bucket-encryption \
+  --bucket "${BUCKET_NAME}" \
+  --server-side-encryption-configuration '{
+    "Rules": [
+      {
+        "ApplyServerSideEncryptionByDefault": { "SSEAlgorithm": "AES256" },
+        "BucketKeyEnabled": true
+      }
+    ]
+  }'
+
+# 4. Enforce Full Public Access Block
+aws s3api put-public-access-block \
+  --bucket "${BUCKET_NAME}" \
+  --public-access-block-configuration '{
+    "BlockPublicAcls": true,
+    "IgnorePublicAcls": true,
+    "BlockPublicPolicy": true,
+    "RestrictPublicBuckets": true
+  }'
+
+# 5. Enforce TLS 1.2+ Transport Mandate
+aws s3api put-bucket-policy \
+  --bucket "${BUCKET_NAME}" \
+  --policy "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [
+      {
+        \"Sid\": \"EnforceSecureTransport\",
+        \"Effect\": \"Deny\",
+        \"Principal\": \"*\",
+        \"Action\": \"s3:*\",
+        \"Resource\": [\"arn:aws:s3:::${BUCKET_NAME}\", \"arn:aws:s3:::${BUCKET_NAME}/*\"],
+        \"Condition\": { \"Bool\": { \"aws:SecureTransport\": \"false\" } }
+      }
+    ]
+  }"
+
+# 6. Create DynamoDB Lock Table ($0 idle on PAY_PER_REQUEST)
+aws dynamodb create-table \
+  --table-name "${TABLE_NAME}" \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region "${AWS_REGION}" \
+  --tags Key=Project,Value=PF-Shield Key=ManagedBy,Value=Manual-Bootstrap
+```
+</details>
+
+#### 0.2 GitHub Actions OIDC & Bootstrap Role (`terraform-bootstrap/`)
+PF-Shield establishes keyless, zero-secret authentication between GitHub Actions and AWS using OpenID Connect (OIDC). This is isolated in a separate, lightweight Terraform module:
+
+```bash
+cd terraform-bootstrap
+terraform init
+terraform apply -auto-approve -var="github_repository=YOUR_GITHUB_USER/pf-shield-cloud-security"
+# Or via Makefile:
+make bootstrap-oidc
+```
+
+Then add the output `github_actions_role_arn` to GitHub repository secrets:
+- **Secret Name**: `AWS_ROLE_TO_ASSUME`
+- **Secret Value**: `arn:aws:iam::<ACCOUNT_ID>:role/pf-shield-github-actions-bootstrap-role`
+
+---
+
+### Step 1: Local Verification & Pre-Flight Checks
 ```bash
 # 1. Clone repository
 git clone https://github.com/YousefOsama/pf-shield-cloud-security.git
@@ -144,7 +256,7 @@ cd pf-shield-cloud-security
 # 2. Run unit tests (Moto AWS mocking)
 make test
 
-# 3. Run Checkov policy-as-code security scan
+# 3. Run Checkov policy-as-code security scan across main and bootstrap IaC
 make scan
 
 # 4. Verify regional service availability
@@ -154,10 +266,13 @@ make scan
 make simulate-attack
 ```
 
-### Production Deployment Order
-1. **Initialize Terraform**:
+---
+
+### Step 2: Production Deployment Order
+1. **Initialize Terraform with Remote Backend**:
    ```bash
-   cd terraform && terraform init
+   cd terraform
+   terraform init -backend-config="bucket=pf-shield-tfstate-<YOUR_ACCOUNT_ID>"
    ```
 2. **Review Execution Plan**:
    ```bash
@@ -171,6 +286,22 @@ make simulate-attack
    - Query the public listings API: `curl -i $(terraform output -raw edge_api_properties_route)`
    - Request a presigned KYC upload URL: `curl -i -X POST $(terraform output -raw edge_api_kyc_presign_route) -d '{"document_type":"emirates_id","file_extension":"pdf","broker_id":"brk-991"}'`
    - Trigger attack simulation: `../scripts/simulate_attack.sh`
+
+---
+
+### Step 3: CI/CD Workflows Overview
+
+PF-Shield provides three automated GitHub Actions workflows:
+
+1. **DevSecOps Pipeline ([`devsecops-pipeline.yml`](.github/workflows/devsecops-pipeline.yml))**:
+   - Triggers on push to `main`.
+   - Executes SOAR unit test suites (`pytest` + `moto`), full IaC static analysis (`Checkov`), and shift-left Kubernetes policies (`Kyverno CLI`).
+2. **PR Security Gate ([`pr-checkov.yml`](.github/workflows/pr-checkov.yml))**:
+   - Triggers on pull requests affecting `terraform/**` or `terraform-bootstrap/**`.
+   - Runs `terraform fmt -check`, `terraform validate`, and scans for security regressions with `Checkov`, blocking non-compliant PRs before merge.
+3. **1-Click Manual Teardown ([`terraform-destroy.yml`](.github/workflows/terraform-destroy.yml))**:
+   - Triggers via `workflow_dispatch` in the GitHub Actions UI.
+   - Assumes the OIDC bootstrap role and executes `terraform destroy` with a required confirmation safety latch (`confirmation: destroy`), restoring spend to **$0.00/month** with one click.
 
 ---
 
