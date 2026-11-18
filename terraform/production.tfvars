@@ -17,6 +17,10 @@ enable_waf                       = true
 enable_guardduty_and_securityhub = true
 enable_observability_dashboard   = true
 
+# ECS Container Platform (Production HA across Private Subnets)
+ecs_desired_count          = 2
+enable_deletion_protection = true
+
 # SOAR Configuration (Human-in-the-loop escalation + Protected Identities)
 containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin,lead-security-engineer"

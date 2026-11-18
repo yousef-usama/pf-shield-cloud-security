@@ -1,12 +1,8 @@
 data "aws_caller_identity" "current" {}
-data "aws_availability_zones" "available" {
-  #checkov:skip=CKV_AWS_394: Availability zones dynamically queried and indexed strictly to 0 and 1
-  state = "available"
-}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
-  # Permit current deployment account identity plus explicitly passed roles (e.g. KYC Lambda, SOAR Lambda)
+  # Permit current deployment account identity plus explicitly passed roles (e.g. KYC Lambda/ECS, SOAR Lambda)
   effective_allowed_arns = distinct(concat(
     [
       data.aws_caller_identity.current.arn,
@@ -17,93 +13,7 @@ locals {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 1. NETWORK ISOLATION: VPC & ZERO-COST GATEWAY ENDPOINTS
-# ---------------------------------------------------------------------------------------------------------------------
-
-resource "aws_vpc" "kyc_vpc" {
-  #checkov:skip=CKV2_AWS_11: VPC Flow Logs disabled to maintain $0.00 idle cost guardrail
-  #checkov:skip=CKV2_AWS_12: Default security group restricted with zero inbound/outbound rules
-  cidr_block           = "10.20.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  tags = {
-    Name = "pf-shield-vpc-${var.environment}"
-  }
-}
-
-resource "aws_default_security_group" "default" {
-  vpc_id = aws_vpc.kyc_vpc.id
-
-  # Zero ingress and zero egress rules enforces baseline isolation (CIS AWS Benchmark)
-  tags = {
-    Name = "pf-shield-default-sg-locked"
-  }
-}
-
-resource "aws_subnet" "private_a" {
-  vpc_id            = aws_vpc.kyc_vpc.id
-  cidr_block        = "10.20.1.0/24"
-  availability_zone = data.aws_availability_zones.available.names[0]
-
-  tags = {
-    Name = "pf-shield-subnet-private-a-${var.environment}"
-  }
-}
-
-resource "aws_subnet" "private_b" {
-  vpc_id            = aws_vpc.kyc_vpc.id
-  cidr_block        = "10.20.2.0/24"
-  availability_zone = data.aws_availability_zones.available.names[1]
-
-  tags = {
-    Name = "pf-shield-subnet-private-b-${var.environment}"
-  }
-}
-
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.kyc_vpc.id
-
-  tags = {
-    Name = "pf-shield-rt-private-${var.environment}"
-  }
-}
-
-resource "aws_route_table_association" "private_a" {
-  subnet_id      = aws_subnet.private_a.id
-  route_table_id = aws_route_table.private.id
-}
-
-resource "aws_route_table_association" "private_b" {
-  subnet_id      = aws_subnet.private_b.id
-  route_table_id = aws_route_table.private.id
-}
-
-# Free Gateway Endpoints: $0.00/hour, routing internal traffic directly to AWS S3 & DynamoDB
-resource "aws_vpc_endpoint" "s3" {
-  vpc_id            = aws_vpc.kyc_vpc.id
-  service_name      = "com.amazonaws.${var.aws_region}.s3"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = [aws_route_table.private.id]
-
-  tags = {
-    Name = "pf-shield-vpce-s3-${var.environment}"
-  }
-}
-
-resource "aws_vpc_endpoint" "dynamodb" {
-  vpc_id            = aws_vpc.kyc_vpc.id
-  service_name      = "com.amazonaws.${var.aws_region}.dynamodb"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = [aws_route_table.private.id]
-
-  tags = {
-    Name = "pf-shield-vpce-dynamodb-${var.environment}"
-  }
-}
-
-# ---------------------------------------------------------------------------------------------------------------------
-# 2. ENVELOPE ENCRYPTION: KMS CUSTOMER MANAGED KEY (CMK)
+# 1. ENVELOPE ENCRYPTION: KMS CUSTOMER MANAGED KEY (CMK)
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_kms_key" "pf_kyc_cmk" {
@@ -170,7 +80,7 @@ resource "aws_kms_alias" "pf_kyc_cmk_alias" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 3. ZERO-TRUST BROKER KYC DOCUMENT VAULT (S3)
+# 2. ZERO-TRUST BROKER KYC DOCUMENT VAULT (S3)
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "random_id" "bucket_suffix" {
@@ -285,7 +195,7 @@ resource "aws_s3_bucket_policy" "kyc_vault_policy" {
         Resource = "${aws_s3_bucket.kyc_vault.arn}/*"
         Condition = {
           StringNotEquals = {
-            "aws:SourceVpce" = aws_vpc_endpoint.s3.id
+            "aws:SourceVpce" = var.s3_gateway_endpoint_id
           }
           ArnNotEquals = {
             "aws:PrincipalArn" = local.effective_allowed_arns
@@ -297,7 +207,7 @@ resource "aws_s3_bucket_policy" "kyc_vault_policy" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 4. METADATA STORE: DYNAMODB PROPERTIES & KYC METADATA TABLE
+# 3. METADATA STORE: DYNAMODB PROPERTIES & KYC METADATA TABLE
 # ---------------------------------------------------------------------------------------------------------------------
 
 #checkov:skip=CKV_AWS_28: "DynamoDB PITR enabled below via point_in_time_recovery block"

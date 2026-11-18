@@ -18,13 +18,13 @@ output "finops_budget_id" {
 }
 
 output "kyc_vpc_id" {
-  description = "The isolated VPC ID housing the zero-cost S3 and DynamoDB Gateway Endpoints"
-  value       = module.zero_trust_kyc_vault.vpc_id
+  description = "The multi-tier VPC ID housing private workloads and zero-cost S3/DynamoDB Gateway Endpoints"
+  value       = module.network.vpc_id
 }
 
 output "kyc_s3_gateway_endpoint_id" {
   description = "The VPC S3 Gateway Endpoint ID routing private traffic without NAT Gateway costs"
-  value       = module.zero_trust_kyc_vault.s3_gateway_endpoint_id
+  value       = module.network.s3_gateway_endpoint_id
 }
 
 output "kyc_kms_cmk_arn" {
@@ -80,4 +80,29 @@ output "edge_api_kyc_presign_route" {
 output "observability_dashboard_name" {
   description = "Name of the CloudWatch Security Operations dashboard"
   value       = module.observability.dashboard_name
+}
+
+output "ecs_cluster_name" {
+  description = "The name of the Amazon ECS Fargate cluster"
+  value       = module.container_platform.ecs_cluster_name
+}
+
+output "alb_dns_name" {
+  description = "Application Load Balancer DNS name"
+  value       = module.container_platform.alb_dns_name
+}
+
+output "ecr_listings_api_repository_url" {
+  description = "ECR repository URL for listings-api"
+  value       = module.container_platform.ecr_listings_api_repository_url
+}
+
+output "ecr_broker_kyc_api_repository_url" {
+  description = "ECR repository URL for broker-kyc-api"
+  value       = module.container_platform.ecr_broker_kyc_api_repository_url
+}
+
+output "ecr_document_scan_worker_repository_url" {
+  description = "ECR repository URL for document-scan-worker"
+  value       = module.container_platform.ecr_document_scan_worker_repository_url
 }

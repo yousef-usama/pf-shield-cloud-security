@@ -15,3 +15,8 @@ variable "allowed_principal_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "s3_gateway_endpoint_id" {
+  description = "The VPC S3 Gateway Endpoint ID routing private traffic"
+  type        = string
+}

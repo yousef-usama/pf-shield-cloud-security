@@ -37,12 +37,18 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`terraform/backend.tf`](terraform/backend.tf): Remote state configuration backed by S3 and DynamoDB state locking.
   - [`terraform/modules/iam-boundaries/`](terraform/modules/iam-boundaries/): Regional permission boundaries (`me-central-1`), dedicated SOAR permission boundary, and emergency quarantine deny-all policies.
   - [`terraform/modules/finops-budget/`](terraform/modules/finops-budget/): AWS Budgets configuration capping spend at $5.00/mo with proactive alerting.
-  - [`terraform/modules/zero-trust-kyc-vault/`](terraform/modules/zero-trust-kyc-vault/): Private VPC, $0.00 S3/DynamoDB Gateway Endpoints, KMS CMK, and S3 Bucket Keys.
+  - [`terraform/modules/network/`](terraform/modules/network/): Multi-tier VPC (`10.20.0.0/16`), public ALB subnets, private app subnets, private database subnets, VPC Flow Logs, and Route 53 private hosted zone.
+  - [`terraform/modules/zero-trust-kyc-vault/`](terraform/modules/zero-trust-kyc-vault/): S3 KYC document vault, KMS CMK envelope encryption, and DynamoDB property metadata table.
+  - [`terraform/modules/container-platform/`](terraform/modules/container-platform/): Amazon ECS on Fargate, ECR immutable repositories with KMS encryption, ALB with TLS 1.3, and autoscaling policies.
   - [`terraform/modules/edge-api-waf/`](terraform/modules/edge-api-waf/): API Gateway HTTP API, Graviton2 Lambda functions, and anti-scraping WAFv2 rules.
   - [`terraform/modules/soar-engine/`](terraform/modules/soar-engine/): Multi-region CloudTrail, EventBridge rules, SQS DLQs, DynamoDB deduplication table (`pf-soar-idempotency`), and auto-remediation Lambdas.
   - [`terraform/modules/observability/`](terraform/modules/observability/): CloudWatch Security Operations dashboard and proactive DLQ/error alarms.
   - [`terraform/modules/secrets/`](terraform/modules/secrets/): SSM Parameter Store (SecureString) encrypted with KMS CMK.
   - [`terraform/modules/identity/`](terraform/modules/identity/): Amazon Cognito User Pool, App Client, and RBAC user groups for authenticated broker identities.
+- [`services/`](services/): Containerized microservices with multi-stage non-root Dockerfiles:
+  - [`services/listings-api/`](services/listings-api/): Public property search and listings service.
+  - [`services/broker-kyc-api/`](services/broker-kyc-api/): Authenticated broker KYC document-upload and presign service.
+  - [`services/document-scan-worker/`](services/document-scan-worker/): Asynchronous malware scanner and file integrity validation worker.
 - [`terraform-bootstrap/`](terraform-bootstrap/): Isolated one-time bootstrap config provisioning GitHub Actions OIDC identity provider and IAM deployer role.
 - [`.github/workflows/`](.github/workflows/): Complete CI/CD and automation suites:
   - [`devsecops-pipeline.yml`](.github/workflows/devsecops-pipeline.yml): Push pipeline running SOAR unit tests, full IaC scan, and Kyverno K8s policies.
@@ -180,6 +186,31 @@ Handling sensitive broker identity records (Emirates IDs, passports, title deeds
   ```
 - **Presigned POST Policy Enforcement**: S3 credentials are issued via presigned POST policies containing cryptographic policy conditions: exact key match, mandatory `aws:kms` SSE algorithm, KMS CMK key ARN, file size range (1 KB minimum, 10 MB maximum), and allowed MIME types.
 - **Lifecycle Audit State Tracking**: Every presigned upload immediately generates an audit record in DynamoDB (`pf-properties-metadata`) initialized to `pending_scan`, ensuring unverified files cannot be accessed or served prior to malware and integrity verification.
+
+### 5. Containerized Microservices Platform & Private Network Perimeter
+To demonstrate cloud-native workload security, the platform provisions containerized microservices on **Amazon ECS on Fargate** across private subnets behind an **Application Load Balancer**:
+- **Multi-Tier Subnet Topology**:
+  - `Public Subnets` (`10.20.10.0/24`, `10.20.11.0/24`): Dedicated exclusively to ALBs and NAT Gateways.
+  - `Private Application Subnets` (`10.20.1.0/24`, `10.20.2.0/24`): ECS tasks run without public IPs (`assign_public_ip = false`).
+  - `Private Database Subnets` (`10.20.20.0/24`, `10.20.21.0/24`): Isolated relational database tier with 0 internet routes.
+- **Three Core Microservices**:
+  1. `services/listings-api`: Public real estate catalog query service.
+  2. `services/broker-kyc-api`: Authenticated broker upload presign service with JWT validation.
+  3. `services/document-scan-worker`: Asynchronous malware scanner detecting EICAR patterns, validating magic bytes, tagging S3 objects, and publishing alerts to SNS.
+- **Defense-in-Depth Container Hardening**:
+  - **Non-Root Execution**: Runs under dedicated unprivileged user `appuser` (UID `10001`, GID `10001`).
+  - **Read-Only Root Filesystem**: Enforced via ECS task definitions (`readonly_root_filesystem = true`) and minimal Debian slim base images.
+  - **Container Health Probes**: Native container health checks polling `/healthz` every 30 seconds.
+- **ECR Supply Chain Governance**:
+  - Image tag immutability (`IMMUTABLE`) preventing tag spoofing.
+  - Automated vulnerability scanning on push (`scan_on_push = true`).
+  - KMS Customer Managed Key envelope encryption.
+  - Automated lifecycle policies expiring untagged artifacts after 7 days.
+- **Least-Privilege Security Group Flow**:
+  - Internet -> ALB: TCP 443 (HTTPS) and TCP 80 (HTTP redirect to HTTPS).
+  - ALB -> ECS: TCP 8000 only; no direct internet access to containers.
+  - ECS -> RDS: TCP 5432 only.
+- **Network Observability**: Centralized VPC Flow Logs captured in CloudWatch Log Groups with 7-day FinOps retention and KMS CMK encryption.
 
 ---
 

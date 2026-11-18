@@ -63,3 +63,15 @@ variable "protected_principals_allowlist" {
   type        = string
   default     = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin"
 }
+
+variable "ecs_desired_count" {
+  description = "Desired number of ECS tasks per service (0 for idle demo profile, 2 for production HA)"
+  type        = number
+  default     = 0
+}
+
+variable "enable_deletion_protection" {
+  description = "Enable deletion protection on production-sensitive load balancers and databases"
+  type        = bool
+  default     = false
+}

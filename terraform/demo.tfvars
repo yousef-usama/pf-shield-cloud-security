@@ -19,6 +19,10 @@ enable_waf                       = false
 enable_guardduty_and_securityhub = false
 enable_observability_dashboard   = true
 
+# ECS Container Platform (Scale-to-Zero for $0.00 Idle Compute)
+ecs_desired_count          = 0
+enable_deletion_protection = false
+
 # SOAR Configuration
 containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin"

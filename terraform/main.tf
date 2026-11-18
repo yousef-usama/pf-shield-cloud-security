@@ -20,12 +20,22 @@ module "finops_budget" {
   environment              = var.environment
 }
 
-# 3. Zero-Trust KYC Document Vault & Private Network Perimeter
+# 3. Multi-Tier Zero-Trust Network Perimeter & Private Subnets
+module "network" {
+  source = "./modules/network"
+
+  aws_region              = var.aws_region
+  environment             = var.environment
+  permission_boundary_arn = module.iam_boundaries.permission_boundary_arn
+}
+
+# 4. Zero-Trust KYC Document Vault & Envelope Encryption
 module "zero_trust_kyc_vault" {
   source = "./modules/zero-trust-kyc-vault"
 
-  aws_region  = var.aws_region
-  environment = var.environment
+  aws_region             = var.aws_region
+  environment            = var.environment
+  s3_gateway_endpoint_id = module.network.s3_gateway_endpoint_id
 
   # Pre-allow roles that require S3 access through the data perimeter
   allowed_principal_arns = [
@@ -34,7 +44,7 @@ module "zero_trust_kyc_vault" {
   ]
 }
 
-# 4. Automated Cloud Incident Response & SOAR Engine
+# 5. Automated Cloud Incident Response & SOAR Engine
 module "soar_engine" {
   source = "./modules/soar-engine"
 
@@ -49,7 +59,7 @@ module "soar_engine" {
   protected_principals_allowlist   = var.protected_principals_allowlist
 }
 
-# 5. Secrets Management & SSM Parameter Store Configuration
+# 6. Secrets Management & SSM Parameter Store Configuration
 module "secrets" {
   source = "./modules/secrets"
 
@@ -60,7 +70,7 @@ module "secrets" {
   sns_topic_arn         = module.soar_engine.security_incidents_sns_topic_arn
 }
 
-# 6. Broker Identity & OIDC Provider (Amazon Cognito)
+# 7. Broker Identity & OIDC Provider (Amazon Cognito)
 module "identity" {
   source = "./modules/identity"
 
@@ -68,7 +78,7 @@ module "identity" {
   aws_region  = var.aws_region
 }
 
-# 7. Edge API Gateway & Anti-Scraping WAF Protection
+# 8. Edge API Gateway & Anti-Scraping WAF Protection
 module "edge_api_waf" {
   source = "./modules/edge-api-waf"
 
@@ -83,7 +93,27 @@ module "edge_api_waf" {
   user_pool_client_id     = module.identity.user_pool_client_id
 }
 
-# 8. Observability, Security Ops Dashboard & Metric Alarms
+# 9. Container Workload Platform & Microservices (Amazon ECS on Fargate)
+module "container_platform" {
+  source = "./modules/container-platform"
+
+  aws_region                 = var.aws_region
+  environment                = var.environment
+  vpc_id                     = module.network.vpc_id
+  public_subnet_ids          = module.network.public_subnet_ids
+  private_subnet_ids         = module.network.private_app_subnet_ids
+  alb_security_group_id      = module.network.alb_security_group_id
+  ecs_security_group_id      = module.network.ecs_security_group_id
+  permission_boundary_arn    = module.iam_boundaries.permission_boundary_arn
+  kms_key_arn                = module.zero_trust_kyc_vault.kms_key_arn
+  dynamodb_table_name        = module.zero_trust_kyc_vault.dynamodb_table_name
+  kyc_vault_bucket_name      = module.zero_trust_kyc_vault.kyc_vault_bucket_name
+  sns_topic_arn              = module.soar_engine.security_incidents_sns_topic_arn
+  ecs_desired_count          = var.ecs_desired_count
+  enable_deletion_protection = var.enable_deletion_protection
+}
+
+# 10. Observability, Security Ops Dashboard & Metric Alarms
 module "observability" {
   source = "./modules/observability"
 
