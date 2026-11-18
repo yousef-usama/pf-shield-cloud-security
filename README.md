@@ -42,6 +42,7 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`terraform/modules/soar-engine/`](terraform/modules/soar-engine/): Multi-region CloudTrail, EventBridge rules, SQS DLQs, DynamoDB deduplication table (`pf-soar-idempotency`), and auto-remediation Lambdas.
   - [`terraform/modules/observability/`](terraform/modules/observability/): CloudWatch Security Operations dashboard and proactive DLQ/error alarms.
   - [`terraform/modules/secrets/`](terraform/modules/secrets/): SSM Parameter Store (SecureString) encrypted with KMS CMK.
+  - [`terraform/modules/identity/`](terraform/modules/identity/): Amazon Cognito User Pool, App Client, and RBAC user groups for authenticated broker identities.
 - [`terraform-bootstrap/`](terraform-bootstrap/): Isolated one-time bootstrap config provisioning GitHub Actions OIDC identity provider and IAM deployer role.
 - [`.github/workflows/`](.github/workflows/): Complete CI/CD and automation suites:
   - [`devsecops-pipeline.yml`](.github/workflows/devsecops-pipeline.yml): Push pipeline running SOAR unit tests, full IaC scan, and Kyverno K8s policies.
@@ -167,6 +168,18 @@ When an unauthorized identity attempts S3 public access exposure or IAM privileg
 1. EventBridge matches the CloudTrail or GuardDuty event pattern.
 2. If Lambda execution throttles, the attached SQS Dead Letter Queue captures the event (zero dropped alert SLA).
 3. The SOAR Lambda attaches `pf-soar-quarantine-deny-all` to the offending principal, restores all 4 S3 Public Access Block flags to `True`, deactivates all active access keys, and publishes a structured forensic alert to SNS in **< 1.5 seconds**.
+
+### 4. Broker Identity & Multi-Tenant KYC Zero-Trust Authorization
+Handling sensitive broker identity records (Emirates IDs, passports, title deeds) requires defense-in-depth access controls:
+- **Edge Token Verification**: Amazon Cognito User Pool (`pf-shield-broker-pool`) issues signed JWTs with custom tenant and broker claims (`custom:tenant_id`, `custom:broker_id`, `custom:role`). API Gateway HTTP API enforces native JWT authorizer verification against the Cognito OIDC issuer and audience.
+- **Server-Side Identity Derivation**: The application handler strictly rejects and ignores caller-supplied `broker_id` or `tenant_id` fields in request bodies. Identity claims are cryptographically extracted and verified server-side.
+- **Path Traversal & Injection Prevention**: Tenant and broker identifiers are regex-validated (`^[a-zA-Z0-9_-]{3,64}$`) to prevent directory traversal (`../`) or unauthorized namespace escaping.
+- **Isolated Prefix Construction**: S3 object keys are generated strictly on the server:
+  ```text
+  kyc-documents/{tenant_id}/{broker_id}/{doc_type}/{uuid}.{file_ext}
+  ```
+- **Presigned POST Policy Enforcement**: S3 credentials are issued via presigned POST policies containing cryptographic policy conditions: exact key match, mandatory `aws:kms` SSE algorithm, KMS CMK key ARN, file size range (1 KB minimum, 10 MB maximum), and allowed MIME types.
+- **Lifecycle Audit State Tracking**: Every presigned upload immediately generates an audit record in DynamoDB (`pf-properties-metadata`) initialized to `pending_scan`, ensuring unverified files cannot be accessed or served prior to malware and integrity verification.
 
 ---
 

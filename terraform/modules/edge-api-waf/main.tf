@@ -153,6 +153,15 @@ resource "aws_iam_role_policy" "kyc_vault_permissions" {
         Resource = "arn:aws:s3:::${var.kyc_vault_bucket_name}/*"
       },
       {
+        Sid    = "DynamoDBInitialScanStatus"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem"
+        ]
+        Resource = "arn:aws:dynamodb:${var.aws_region}:*:table/${var.dynamodb_table_name}"
+      },
+      {
         Sid    = "KMSEnvelopeEncryption"
         Effect = "Allow"
         Action = [
@@ -208,6 +217,7 @@ resource "aws_lambda_function" "kyc_vault" {
   environment {
     variables = {
       KYC_VAULT_BUCKET_NAME = var.kyc_vault_bucket_name
+      DYNAMODB_TABLE_NAME   = var.dynamodb_table_name
       KMS_KEY_ARN           = var.kms_key_arn
       ENVIRONMENT           = var.environment
     }
@@ -310,11 +320,25 @@ resource "aws_apigatewayv2_integration" "kyc_vault" {
   payload_format_version = "2.0"
 }
 
+resource "aws_apigatewayv2_authorizer" "cognito_jwt" {
+  count            = var.user_pool_endpoint != "" ? 1 : 0
+  api_id           = aws_apigatewayv2_api.edge_api.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "pf-cognito-jwt-authorizer-${var.environment}"
+
+  jwt_configuration {
+    audience = [var.user_pool_client_id]
+    issuer   = "https://${var.user_pool_endpoint}"
+  }
+}
+
 resource "aws_apigatewayv2_route" "post_kyc_presign" {
-  #checkov:skip=CKV_AWS_309: KYC presign endpoint validates broker credentials in Lambda handler payload; protected by WAF and rate limiting
-  api_id    = aws_apigatewayv2_api.edge_api.id
-  route_key = "POST /api/v1/kyc/presign"
-  target    = "integrations/${aws_apigatewayv2_integration.kyc_vault.id}"
+  api_id             = aws_apigatewayv2_api.edge_api.id
+  route_key          = "POST /api/v1/kyc/presign"
+  target             = "integrations/${aws_apigatewayv2_integration.kyc_vault.id}"
+  authorization_type = var.user_pool_endpoint != "" ? "JWT" : "NONE"
+  authorizer_id      = var.user_pool_endpoint != "" ? aws_apigatewayv2_authorizer.cognito_jwt[0].id : null
 }
 
 resource "aws_lambda_permission" "allow_apigw_kyc_vault" {

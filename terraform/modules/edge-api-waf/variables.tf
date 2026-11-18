@@ -35,3 +35,15 @@ variable "enable_waf" {
   type        = bool
   default     = false
 }
+
+variable "user_pool_endpoint" {
+  description = "Cognito User Pool endpoint for JWT validation"
+  type        = string
+  default     = ""
+}
+
+variable "user_pool_client_id" {
+  description = "Cognito User Pool Client ID for JWT audience validation"
+  type        = string
+  default     = ""
+}

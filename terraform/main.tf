@@ -60,7 +60,15 @@ module "secrets" {
   sns_topic_arn         = module.soar_engine.security_incidents_sns_topic_arn
 }
 
-# 6. Edge API Gateway & Anti-Scraping WAF Protection
+# 6. Broker Identity & OIDC Provider (Amazon Cognito)
+module "identity" {
+  source = "./modules/identity"
+
+  environment = var.environment
+  aws_region  = var.aws_region
+}
+
+# 7. Edge API Gateway & Anti-Scraping WAF Protection
 module "edge_api_waf" {
   source = "./modules/edge-api-waf"
 
@@ -71,9 +79,11 @@ module "edge_api_waf" {
   dynamodb_table_name     = module.zero_trust_kyc_vault.dynamodb_table_name
   kyc_vault_bucket_name   = module.zero_trust_kyc_vault.kyc_vault_bucket_name
   enable_waf              = var.enable_waf
+  user_pool_endpoint      = module.identity.user_pool_endpoint
+  user_pool_client_id     = module.identity.user_pool_client_id
 }
 
-# 7. Observability, Security Ops Dashboard & Metric Alarms
+# 8. Observability, Security Ops Dashboard & Metric Alarms
 module "observability" {
   source = "./modules/observability"
 
