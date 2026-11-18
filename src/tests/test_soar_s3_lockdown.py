@@ -69,14 +69,28 @@ def aws_environment():
         topic_res = sns.create_topic(Name="pf-security-incidents")
         sns_topic_arn = topic_res["TopicArn"]
 
+        # 5. Create mock DynamoDB idempotency table
+        dynamodb = boto3.client("dynamodb", region_name="me-central-1")
+        table_name = "pf-soar-idempotency-test"
+        dynamodb.create_table(
+            TableName=table_name,
+            KeySchema=[{"AttributeName": "event_id", "KeyType": "HASH"}],
+            AttributeDefinitions=[{"AttributeName": "event_id", "AttributeType": "S"}],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
         os.environ["QUARANTINE_POLICY_ARN"] = quarantine_policy_arn
         os.environ["SNS_TOPIC_ARN"] = sns_topic_arn
+        os.environ["IDEMPOTENCY_TABLE_NAME"] = table_name
+        os.environ["CONTAINMENT_MODE"] = "AUTOMATIC"
+        os.environ["PROTECTED_PRINCIPALS_ALLOWLIST"] = "root,security-admin,break-glass,pf-shield-github-actions"
 
         yield {
             "bucket_name": bucket_name,
             "role_name": role_name,
             "quarantine_policy_arn": quarantine_policy_arn,
             "sns_topic_arn": sns_topic_arn,
+            "idempotency_table": table_name,
         }
 
 
@@ -150,3 +164,90 @@ def test_s3_lockdown_simulated_attack_event(aws_environment):
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["status"] == "CONTAINED"
+
+
+def test_s3_lockdown_idempotency_prevents_duplicate_execution(aws_environment):
+    """Test that duplicate events with identical event_id are skipped via DynamoDB idempotency."""
+    from src.soar import playbook_s3_lockdown
+
+    bucket_name = aws_environment["bucket_name"]
+    role_name = aws_environment["role_name"]
+
+    event = {
+        "version": "0",
+        "id": "unique-event-id-9999",
+        "source": "pf.security.simulation",
+        "detail-type": "Simulated S3 Public Exposure Attack",
+        "detail": {
+            "affected_bucket": bucket_name,
+            "offending_principal": role_name,
+            "principal_type": "Role",
+        },
+    }
+
+    # First invocation should execute containment
+    resp1 = playbook_s3_lockdown.lambda_handler(event, None)
+    assert resp1["statusCode"] == 200
+    body1 = json.loads(resp1["body"])
+    assert body1["status"] == "CONTAINED"
+
+    # Second invocation with same event_id should be skipped by idempotency
+    resp2 = playbook_s3_lockdown.lambda_handler(event, None)
+    assert resp2["statusCode"] == 200
+    body2 = json.loads(resp2["body"])
+    assert body2["status"] == "SKIPPED_DUPLICATE"
+
+
+def test_s3_lockdown_bypasses_protected_principal(aws_environment):
+    """Test that protected identities (admin, break-glass) are never quarantined automatically."""
+    from src.soar import playbook_s3_lockdown
+
+    bucket_name = aws_environment["bucket_name"]
+
+    event = {
+        "version": "0",
+        "id": "protected-principal-event-01",
+        "source": "pf.security.simulation",
+        "detail-type": "Simulated S3 Public Exposure Attack",
+        "detail": {
+            "affected_bucket": bucket_name,
+            "offending_principal": "security-admin-role",
+            "principal_type": "Role",
+        },
+    }
+
+    resp = playbook_s3_lockdown.lambda_handler(event, None)
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["status"] == "ESCALATED_PROTECTED_PRINCIPAL"
+    assert "protected" in body["actions_taken"][1].lower()
+
+
+def test_s3_lockdown_human_approval_mode(aws_environment):
+    """Test that containment_mode=HUMAN_APPROVAL does not quarantine identity without sign-off."""
+    from src.soar import playbook_s3_lockdown
+
+    os.environ["CONTAINMENT_MODE"] = "HUMAN_APPROVAL"
+    try:
+        bucket_name = aws_environment["bucket_name"]
+        role_name = aws_environment["role_name"]
+
+        event = {
+            "version": "0",
+            "id": "human-approval-event-01",
+            "source": "pf.security.simulation",
+            "detail-type": "Simulated S3 Public Exposure Attack",
+            "detail": {
+                "affected_bucket": bucket_name,
+                "offending_principal": role_name,
+                "principal_type": "Role",
+            },
+        }
+
+        resp = playbook_s3_lockdown.lambda_handler(event, None)
+        assert resp["statusCode"] == 200
+        body = json.loads(resp["body"])
+        assert body["status"] == "AWAITING_APPROVAL"
+    finally:
+        os.environ["CONTAINMENT_MODE"] = "AUTOMATIC"
+

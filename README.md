@@ -24,19 +24,22 @@ Real estate platforms handle millions of property listings and tens of thousands
 - [2. Contents (Repository Navigation & Table of Contents)](#2-contents-repository-navigation--table-of-contents)
 - [3. Visual Architecture Diagram](#3-visual-architecture-diagram)
 - [4. Tool Selection Rationale & Tradeoffs](#4-tool-selection-rationale--tradeoffs)
-- [5. Architecture & Tenancy Deep Dive](#5-architecture--tenancy-deep-dive)
-- [6. Step-by-Step Deployment Runbook](#6-step-by-step-deployment-runbook)
-- [7. Production Incident Post-Mortems](#7-production-incident-post-mortems)
-- [8. Cost Notes & Teardown Protocol](#8-cost-notes--teardown-protocol)
+- [5. Architecture Assumptions & Environment Profiles](#5-architecture-assumptions--environment-profiles)
+- [6. Architecture & Tenancy Deep Dive](#6-architecture--tenancy-deep-dive)
+- [7. Step-by-Step Deployment Runbook](#7-step-by-step-deployment-runbook)
+- [8. Production Incident Post-Mortems](#8-production-incident-post-mortems)
+- [9. Cost Notes & Teardown Protocol](#9-cost-notes--teardown-protocol)
 
 ### Repository Directory Map
 - [`terraform/`](terraform/): 100% modular Infrastructure-as-Code root configuration.
+  - [`terraform/demo.tfvars`](terraform/demo.tfvars): Economical evaluation and testing profile ($0.00 idle cost, scale-to-zero).
+  - [`terraform/production.tfvars`](terraform/production.tfvars): Hardened enterprise production baseline (full WAF, GuardDuty, Security Hub, Multi-AZ).
   - [`terraform/backend.tf`](terraform/backend.tf): Remote state configuration backed by S3 and DynamoDB state locking.
-  - [`terraform/modules/iam-boundaries/`](terraform/modules/iam-boundaries/): Regional permission boundaries (`me-central-1`) and emergency quarantine deny-all policies.
+  - [`terraform/modules/iam-boundaries/`](terraform/modules/iam-boundaries/): Regional permission boundaries (`me-central-1`), dedicated SOAR permission boundary, and emergency quarantine deny-all policies.
   - [`terraform/modules/finops-budget/`](terraform/modules/finops-budget/): AWS Budgets configuration capping spend at $5.00/mo with proactive alerting.
   - [`terraform/modules/zero-trust-kyc-vault/`](terraform/modules/zero-trust-kyc-vault/): Private VPC, $0.00 S3/DynamoDB Gateway Endpoints, KMS CMK, and S3 Bucket Keys.
   - [`terraform/modules/edge-api-waf/`](terraform/modules/edge-api-waf/): API Gateway HTTP API, Graviton2 Lambda functions, and anti-scraping WAFv2 rules.
-  - [`terraform/modules/soar-engine/`](terraform/modules/soar-engine/): Multi-region CloudTrail, EventBridge rules, SQS DLQs, and auto-remediation Lambdas.
+  - [`terraform/modules/soar-engine/`](terraform/modules/soar-engine/): Multi-region CloudTrail, EventBridge rules, SQS DLQs, DynamoDB deduplication table (`pf-soar-idempotency`), and auto-remediation Lambdas.
   - [`terraform/modules/observability/`](terraform/modules/observability/): CloudWatch Security Operations dashboard and proactive DLQ/error alarms.
   - [`terraform/modules/secrets/`](terraform/modules/secrets/): SSM Parameter Store (SecureString) encrypted with KMS CMK.
 - [`terraform-bootstrap/`](terraform-bootstrap/): Isolated one-time bootstrap config provisioning GitHub Actions OIDC identity provider and IAM deployer role.
@@ -84,7 +87,36 @@ Real estate platforms handle millions of property listings and tens of thousands
 
 ---
 
-## 5. Architecture & Tenancy Deep Dive
+## 5. Architecture Assumptions & Environment Profiles
+
+### 5.1 Vendor-Neutral Architecture & Public Inspiration
+PF-Shield is intentionally engineered as a **vendor-neutral, cloud-security reference architecture** broadly applicable to real estate, marketplace, and data-intensive platforms. External public cloud case studies (e.g., containerized microservices behind ALBs, automated incident containment, and analytics security) serve strictly as architectural inspiration rather than an internal implementation of any single commercial entity.
+
+### 5.2 Environment Profiles: Demonstration vs Production Baseline
+
+To reconcile rigorous enterprise security with developer FinOps, PF-Shield provides two explicit, decoupled Terraform profiles:
+
+| Dimension | Demonstration Profile (`demo.tfvars`) | Production Baseline (`production.tfvars`) |
+| :--- | :--- | :--- |
+| **Operational Purpose** | Low-cost local verification, CI/CD pipelines, and simulated attack replay. | 24/7 sovereign enterprise operations under UAE PDPL & ISO 27001. |
+| **Idle Run Rate** | **$0.00 – $1.10 / month** (scale-to-zero serverless, free VPC Gateway Endpoints). | **~$12.00 – $250.00 / month** (depending on cluster capacity & managed logs). |
+| **AWS WAFv2** | Disabled by default (`enable_waf = false`) to eliminate hourly WebACL fees. | Enabled with Managed Common Rules, SQLi, and IP rate-limiting rules. |
+| **Amazon GuardDuty & Security Hub** | Feature-flagged off; attacks simulated via local EventBridge payloads. | Enabled with continuous S3 protection and automated finding ingestion. |
+| **Log Retention** | Aggressive 7-day expiration to prevent storage accumulation. | Multi-year compliance retention with immutable S3 audit destinations. |
+| **Data Deletion Protection** | `force_destroy = true` on S3 buckets for 1-click teardown. | `force_destroy = false` and Object Lock enabled to prevent data loss. |
+| **Security Caveat** | > [!WARNING]<br>> **Do not represent `demo.tfvars` as production-secure.** It is an economical test harness. | Full security, detective, and preventative controls active. |
+
+### 5.3 Hardened SOAR Automation Architecture
+
+The SOAR engine (`terraform/modules/soar-engine/`) incorporates key operational reliability patterns:
+1. **Dedicated SOAR Permissions Boundary**: Resolves the classic boundary-conflict bug where standard workload permission boundaries deny `s3:PutBucketPublicAccessBlock` to the remediation Lambda. The dedicated SOAR boundary permits only explicit containment actions (`s3:PutBucketPublicAccessBlock`, `iam:AttachRolePolicy`, `iam:UpdateAccessKey`, `dynamodb:PutItem`, and scoped SNS/SQS telemetry).
+2. **Protected-Principals Allowlist**: Evaluates all targets against an allowlist (`root`, `AWSServiceRole`, `pf-shield-github-actions`, `security-admin`, `break-glass`). If an alert involves a protected identity, automatic quarantine is safely bypassed, preventing denial-of-service on operations, and escalated for immediate human review.
+3. **DynamoDB Event Idempotency**: Deduplicates EventBridge alerts using a TTL-backed table (`pf-soar-idempotency-${environment}`) with conditional writes (`attribute_not_exists(event_id)`), ensuring at-most-once remediation.
+4. **Dual Containment Modes**: Supports `AUTOMATIC` (immediate quarantine and S3 lockdown) and `HUMAN_APPROVAL` (generates structured forensic proposals awaiting engineer sign-off).
+
+---
+
+## 6. Architecture & Tenancy Deep Dive
 
 ```
 [ External Scrapers & Threat Actors ]
@@ -138,7 +170,7 @@ When an unauthorized identity attempts S3 public access exposure or IAM privileg
 
 ---
 
-## 6. Step-by-Step Deployment Runbook
+## 7. Step-by-Step Deployment Runbook
 
 ### Prerequisites
 - AWS CLI `>= 2.15.0` configured with administrative credentials in region `me-central-1`.
@@ -268,15 +300,19 @@ make simulate-attack
 
 ---
 
-### Step 2: Production Deployment Order
+### Step 2: Infrastructure Deployment Order
 1. **Initialize Terraform with Remote Backend**:
    ```bash
    cd terraform
    terraform init -backend-config="bucket=pf-shield-tfstate-<YOUR_ACCOUNT_ID>"
    ```
-2. **Review Execution Plan**:
+2. **Review Execution Plan (Choose Profile)**:
    ```bash
-   terraform plan -out=tfplan
+   # Option A: Deploy economical demonstration profile ($0.00 idle cost)
+   terraform plan -var-file="demo.tfvars" -out=tfplan
+
+   # Option B: Deploy full production security baseline
+   terraform plan -var-file="production.tfvars" -out=tfplan
    ```
 3. **Provision Infrastructure**:
    ```bash
@@ -305,7 +341,7 @@ PF-Shield provides three automated GitHub Actions workflows:
 
 ---
 
-## 7. Production Incident Post-Mortems
+## 8. Production Incident Post-Mortems
 
 Technical challenges encountered during implementation are documented below and in [docs/EVIDENCE.md](docs/EVIDENCE.md#7-comprehensive-incident-post-mortem-log):
 
@@ -323,7 +359,7 @@ Technical challenges encountered during implementation are documented below and 
 
 ---
 
-## 8. Cost Notes & Teardown Protocol
+## 9. Cost Notes & Teardown Protocol
 
 ### FinOps Summary
 - **Baseline Idle Run Rate**: **$0.00 – $1.10 / month** (1x KMS CMK = $1.00/mo; all compute, networking, and databases operate on scale-to-zero free tiers).
@@ -339,7 +375,7 @@ make destroy
 
 ---
 
-## 9. Author & License
+## 10. Author & License
 
 - **Author**: Yousef Osama
 - **License**: MIT License

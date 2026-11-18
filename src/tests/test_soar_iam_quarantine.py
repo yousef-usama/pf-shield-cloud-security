@@ -46,14 +46,28 @@ def iam_environment():
         topic_res = sns.create_topic(Name="pf-security-incidents")
         sns_topic_arn = topic_res["TopicArn"]
 
+        # 5. Create mock DynamoDB idempotency table
+        dynamodb = boto3.client("dynamodb", region_name="me-central-1")
+        table_name = "pf-soar-idempotency-iam-test"
+        dynamodb.create_table(
+            TableName=table_name,
+            KeySchema=[{"AttributeName": "event_id", "KeyType": "HASH"}],
+            AttributeDefinitions=[{"AttributeName": "event_id", "AttributeType": "S"}],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
         os.environ["QUARANTINE_POLICY_ARN"] = quarantine_policy_arn
         os.environ["SNS_TOPIC_ARN"] = sns_topic_arn
+        os.environ["IDEMPOTENCY_TABLE_NAME"] = table_name
+        os.environ["CONTAINMENT_MODE"] = "AUTOMATIC"
+        os.environ["PROTECTED_PRINCIPALS_ALLOWLIST"] = "root,security-admin,break-glass,pf-shield-github-actions"
 
         yield {
             "user_name": user_name,
             "access_key_id": access_key_id,
             "quarantine_policy_arn": quarantine_policy_arn,
             "sns_topic_arn": sns_topic_arn,
+            "idempotency_table": table_name,
         }
 
 
@@ -119,3 +133,82 @@ def test_iam_quarantine_simulated_attack_event(iam_environment):
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["status"] == "CONTAINED"
+
+
+def test_iam_quarantine_idempotency_prevents_duplicate_execution(iam_environment):
+    """Test that duplicate IAM events with same event_id are skipped."""
+    from src.soar import playbook_iam_quarantine
+
+    user_name = iam_environment["user_name"]
+
+    event = {
+        "version": "0",
+        "id": "iam-dedup-event-8888",
+        "source": "pf.security.simulation",
+        "detail-type": "Simulated IAM Credential Compromise",
+        "detail": {
+            "compromised_principal": user_name,
+            "principal_type": "User",
+        },
+    }
+
+    # First call contains identity
+    resp1 = playbook_iam_quarantine.lambda_handler(event, None)
+    assert resp1["statusCode"] == 200
+    body1 = json.loads(resp1["body"])
+    assert body1["status"] == "CONTAINED"
+
+    # Second call is skipped as duplicate
+    resp2 = playbook_iam_quarantine.lambda_handler(event, None)
+    assert resp2["statusCode"] == 200
+    body2 = json.loads(resp2["body"])
+    assert body2["status"] == "SKIPPED_DUPLICATE"
+
+
+def test_iam_quarantine_bypasses_protected_principal(iam_environment):
+    """Test that protected identities are never frozen or locked out."""
+    from src.soar import playbook_iam_quarantine
+
+    event = {
+        "version": "0",
+        "id": "protected-iam-event-01",
+        "source": "pf.security.simulation",
+        "detail-type": "Simulated IAM Credential Compromise",
+        "detail": {
+            "compromised_principal": "break-glass-admin",
+            "principal_type": "User",
+        },
+    }
+
+    resp = playbook_iam_quarantine.lambda_handler(event, None)
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["status"] == "ESCALATED_PROTECTED_PRINCIPAL"
+
+
+def test_iam_quarantine_human_approval_mode(iam_environment):
+    """Test that HUMAN_APPROVAL mode drafts proposal without deactivating credentials."""
+    from src.soar import playbook_iam_quarantine
+
+    os.environ["CONTAINMENT_MODE"] = "HUMAN_APPROVAL"
+    try:
+        user_name = iam_environment["user_name"]
+
+        event = {
+            "version": "0",
+            "id": "human-approval-iam-01",
+            "source": "pf.security.simulation",
+            "detail-type": "Simulated IAM Credential Compromise",
+            "detail": {
+                "compromised_principal": user_name,
+                "principal_type": "User",
+            },
+        }
+
+        resp = playbook_iam_quarantine.lambda_handler(event, None)
+        assert resp["statusCode"] == 200
+        body = json.loads(resp["body"])
+        assert body["status"] == "AWAITING_APPROVAL"
+    finally:
+        os.environ["CONTAINMENT_MODE"] = "AUTOMATIC"
+

@@ -72,3 +72,13 @@ output "iam_eventbridge_rule_arn" {
   description = "The ARN of the IAM privilege escalation / compromise EventBridge rule"
   value       = aws_cloudwatch_event_rule.iam_security_rule.arn
 }
+
+output "soar_idempotency_table_name" {
+  description = "The name of the DynamoDB table used for SOAR event deduplication and idempotency"
+  value       = aws_dynamodb_table.soar_idempotency.name
+}
+
+output "soar_idempotency_table_arn" {
+  description = "The ARN of the DynamoDB table used for SOAR event deduplication and idempotency"
+  value       = aws_dynamodb_table.soar_idempotency.arn
+}

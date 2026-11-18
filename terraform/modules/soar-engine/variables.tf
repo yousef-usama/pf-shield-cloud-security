@@ -35,3 +35,15 @@ variable "enable_guardduty_and_securityhub" {
   type        = bool
   default     = false
 }
+
+variable "containment_mode" {
+  description = "SOAR containment operational mode: AUTOMATIC or HUMAN_APPROVAL"
+  type        = string
+  default     = "AUTOMATIC"
+}
+
+variable "protected_principals_allowlist" {
+  description = "Comma-separated list of protected IAM roles or usernames exempt from automatic quarantine"
+  type        = string
+  default     = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin"
+}

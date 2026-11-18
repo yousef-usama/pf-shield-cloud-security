@@ -42,9 +42,11 @@ module "soar_engine" {
   environment                      = var.environment
   alert_email                      = var.alert_email
   kms_key_arn                      = module.zero_trust_kyc_vault.kms_key_arn
-  permission_boundary_arn          = module.iam_boundaries.permission_boundary_arn
+  permission_boundary_arn          = module.iam_boundaries.soar_permission_boundary_arn
   quarantine_policy_arn            = module.iam_boundaries.quarantine_policy_arn
   enable_guardduty_and_securityhub = var.enable_guardduty_and_securityhub
+  containment_mode                 = var.containment_mode
+  protected_principals_allowlist   = var.protected_principals_allowlist
 }
 
 # 5. Secrets Management & SSM Parameter Store Configuration

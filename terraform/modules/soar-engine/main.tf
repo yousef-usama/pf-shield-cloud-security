@@ -198,8 +198,40 @@ resource "aws_sqs_queue" "iam_quarantine_dlq" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 3. SOAR SERVERLESS REMEDIATION LAMBDAS (ARM64 GRAVITON2)
+# 3. SOAR DEDUPLICATION & SERVERLESS REMEDIATION LAMBDAS (ARM64 GRAVITON2)
 # ---------------------------------------------------------------------------------------------------------------------
+
+# DynamoDB Event Idempotency & Deduplication Table
+resource "aws_dynamodb_table" "soar_idempotency" {
+  name         = "pf-soar-idempotency-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "event_id"
+
+  attribute {
+    name = "event_id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = var.kms_key_arn
+  }
+
+  tags = {
+    Name       = "pf-soar-idempotency-${var.environment}"
+    Purpose    = "SOAR Deduplication and Incident Idempotency"
+    Compliance = "UAE-PDPL"
+  }
+}
 
 data "archive_file" "s3_lockdown_zip" {
   type        = "zip"
@@ -250,7 +282,7 @@ resource "aws_iam_role_policy" "s3_lockdown_permissions" {
           "s3:PutBucketPublicAccessBlock",
           "s3:GetBucketPublicAccessBlock"
         ]
-        Resource = "*"
+        Resource = "arn:aws:s3:::pf-*"
       },
       {
         Sid    = "IAMQuarantineAttachment"
@@ -269,7 +301,29 @@ resource "aws_iam_role_policy" "s3_lockdown_permissions" {
           "cloudwatch:PutMetricData",
           "sqs:SendMessage"
         ]
+        Resource = [
+          aws_sns_topic.security_incidents.arn,
+          aws_sqs_queue.s3_lockdown_dlq.arn,
+          aws_sqs_queue.iam_quarantine_dlq.arn
+        ]
+      },
+      {
+        Sid    = "CloudWatchMetricPublishing"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
         Resource = "*"
+      },
+      {
+        Sid    = "DynamoDBIdempotency"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = aws_dynamodb_table.soar_idempotency.arn
       },
       {
         Sid    = "KMSDecryptionAndLogs"
@@ -280,7 +334,10 @@ resource "aws_iam_role_policy" "s3_lockdown_permissions" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "*"
+        Resource = [
+          var.kms_key_arn,
+          "${aws_cloudwatch_log_group.s3_lockdown_logs.arn}:*"
+        ]
       }
     ]
   })
@@ -315,8 +372,11 @@ resource "aws_lambda_function" "s3_lockdown" {
 
   environment {
     variables = {
-      QUARANTINE_POLICY_ARN = var.quarantine_policy_arn
-      SNS_TOPIC_ARN         = aws_sns_topic.security_incidents.arn
+      QUARANTINE_POLICY_ARN          = var.quarantine_policy_arn
+      SNS_TOPIC_ARN                  = aws_sns_topic.security_incidents.arn
+      IDEMPOTENCY_TABLE_NAME         = aws_dynamodb_table.soar_idempotency.name
+      CONTAINMENT_MODE               = var.containment_mode
+      PROTECTED_PRINCIPALS_ALLOWLIST = var.protected_principals_allowlist
     }
   }
 
@@ -374,10 +434,31 @@ resource "aws_iam_role_policy" "iam_quarantine_permissions" {
         Effect = "Allow"
         Action = [
           "sns:Publish",
-          "cloudwatch:PutMetricData",
           "sqs:SendMessage"
         ]
+        Resource = [
+          aws_sns_topic.security_incidents.arn,
+          aws_sqs_queue.s3_lockdown_dlq.arn,
+          aws_sqs_queue.iam_quarantine_dlq.arn
+        ]
+      },
+      {
+        Sid    = "CloudWatchMetricPublishing"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
         Resource = "*"
+      },
+      {
+        Sid    = "DynamoDBIdempotency"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = aws_dynamodb_table.soar_idempotency.arn
       },
       {
         Sid    = "KMSDecryptionAndLogs"
@@ -388,7 +469,10 @@ resource "aws_iam_role_policy" "iam_quarantine_permissions" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "*"
+        Resource = [
+          var.kms_key_arn,
+          "${aws_cloudwatch_log_group.iam_quarantine_logs.arn}:*"
+        ]
       }
     ]
   })
@@ -423,8 +507,11 @@ resource "aws_lambda_function" "iam_quarantine" {
 
   environment {
     variables = {
-      QUARANTINE_POLICY_ARN = var.quarantine_policy_arn
-      SNS_TOPIC_ARN         = aws_sns_topic.security_incidents.arn
+      QUARANTINE_POLICY_ARN          = var.quarantine_policy_arn
+      SNS_TOPIC_ARN                  = aws_sns_topic.security_incidents.arn
+      IDEMPOTENCY_TABLE_NAME         = aws_dynamodb_table.soar_idempotency.name
+      CONTAINMENT_MODE               = var.containment_mode
+      PROTECTED_PRINCIPALS_ALLOWLIST = var.protected_principals_allowlist
     }
   }
 

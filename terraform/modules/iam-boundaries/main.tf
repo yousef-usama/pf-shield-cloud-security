@@ -99,3 +99,95 @@ resource "aws_iam_policy" "soar_quarantine_deny_all" {
     ]
   })
 }
+
+# 3. Dedicated SOAR Permission Boundary
+# Permits only authorized containment actions (PAB restoration, quarantine attachment, telemetry, idempotency)
+# without inheriting the workload boundary's DenyAuditTamperingAndPublicExposure conflict.
+resource "aws_iam_policy" "soar_permission_boundary" {
+  #checkov:skip=CKV_AWS_286: SOAR automation boundary must permit attaching emergency deny-all quarantine policies
+  #checkov:skip=CKV_AWS_287: SOAR automation boundary must permit deactivating compromised access keys
+  #checkov:skip=CKV_AWS_289: Dynamic principal containment requires permissions management within boundary
+  #checkov:skip=CKV_AWS_290: SOAR automation requires write access to contain arbitrary compromised identities
+  #checkov:skip=CKV_AWS_355: Resource wildcard required for deactivating keys and quarantining identities across arbitrary roles/users
+  name        = "pf-soar-permission-boundary-${var.environment}"
+  description = "Dedicated maximum permissions boundary for automated SOAR containment roles"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowSOARS3Lockdown"
+        Effect = "Allow"
+        Action = [
+          "s3:PutBucketPublicAccessBlock",
+          "s3:GetBucketPublicAccessBlock"
+        ]
+        Resource = "arn:aws:s3:::pf-*"
+      },
+      {
+        Sid    = "AllowSOARIAMQuarantine"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:AttachUserPolicy",
+          "iam:ListAccessKeys",
+          "iam:UpdateAccessKey"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowSOARIncidentPublishingAndDeadLetter"
+        Effect = "Allow"
+        Action = [
+          "sns:Publish",
+          "sqs:SendMessage"
+        ]
+        Resource = [
+          "arn:aws:sns:${var.aws_region}:${local.account_id}:pf-security-incidents-${var.environment}",
+          "arn:aws:sqs:${var.aws_region}:${local.account_id}:pf-soar-*-dlq-${var.environment}"
+        ]
+      },
+      {
+        Sid    = "AllowSOARTelemetryAndLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "cloudwatch:PutMetricData"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowSOARDynamoDBIdempotency"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/pf-soar-idempotency-${var.environment}"
+      },
+      {
+        Sid    = "AllowSOARKMSUsage"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "DenyBoundaryTamperingAndRemoval"
+        Effect = "Deny"
+        Action = [
+          "iam:DeletePolicy",
+          "iam:DeletePolicyVersion",
+          "iam:CreatePolicyVersion",
+          "iam:DetachRolePolicy",
+          "iam:DeleteRolePermissionsBoundary"
+        ]
+        Resource = "arn:aws:iam::${local.account_id}:policy/pf-soar-permission-boundary-${var.environment}"
+      }
+    ]
+  })
+}
