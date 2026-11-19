@@ -2,67 +2,122 @@
 
 ## 1. Executive Summary & Context
 
-This threat model analyzes the security posture of **PF-Shield**, an enterprise zero-trust real estate API and automated incident response (SOAR) architecture deployed in the **United Arab Emirates (UAE)** (`me-central-1`). 
+This threat model analyzes the security posture of **PF-Shield — Zero-Trust Real Estate API & Automated Cloud SOAR**, an enterprise cloud security control plane and incident response platform deployed in the **United Arab Emirates (UAE)** (`me-central-1`).
 
-The platform operates critical services handling both proprietary market data (property listings) and highly confidential personal data (broker and tenant Emirates IDs, passports, and title deeds). The threat model evaluates threats against these two core workloads under the Microsoft STRIDE framework:
-1. **Public Property Listings API (`GET /api/v1/properties`)**: Subject to high-frequency competitor scraping, distributed denial-of-service, and OWASP Top 10 API attacks.
-2. **Broker KYC Document Vault (`POST /api/v1/kyc/presign`)**: Subject to targeted identity exfiltration, unauthorized cross-account access, and privilege escalation.
+Real estate platforms handle two high-value classes of digital assets:
+1. **Proprietary Market Data (Listings & Analytics)**: Property catalogs, market pricing indices, and broker directory records subject to automated competitor scraping, inventory scraping, and denial-of-wallet DDoS attacks.
+2. **Confidential Personal Data (Broker & Tenant PII)**: UAE Emirates IDs, passport biometric scans, and RERA title deeds subject to targeted data exfiltration, unauthorized cross-tenant access, privilege escalation, and regulatory breach under **UAE Personal Data Protection Law (PDPL - Federal Decree-Law No. 45 of 2021)**.
+
+This threat model decomposes the platform into **8 discrete Trust Boundaries** and systematically evaluates threat vectors using the Microsoft **STRIDE** taxonomy (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege).
 
 ---
 
-## 2. System Architecture & Trust Boundaries
+## 2. Platform Architecture & Trust Boundaries
 
 ```
 [ External Internet / Scrapers / Threat Actors ]
                        │
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
- TRUST BOUNDARY 1: Edge Perimeter & Anti-Scraping Layer (API Gateway + WAF)
+ TRUST BOUNDARY 1: Edge CDN & Global Protection Layer (CloudFront + AWS Shield Standard)
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
-                       ▼
-           [ API Gateway HTTP API ]
-           ├── Rate Limiting (25 rps / 50 burst)
-           └── AWS WAFv2 (IP Rate Limiting & OWASP Rules)
+       ├── CloudFront Distribution (HTTP/3, TLS 1.3, GCC Geo-Restriction)
+       ├── Response Security Headers (HSTS Preload, X-Frame-Options, X-Content-Type)
+       └── Custom Origin Authentication Header: X-Origin-Verify (High-Entropy Secret)
                        │
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
- TRUST BOUNDARY 2: Serverless Compute Layer (Lambda arm64)
+ TRUST BOUNDARY 2: Web Application Firewall Inspection (AWS WAFv2 Regional)
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
-           ├── Property API Handler (ReadOnly)
-           └── KYC Presign Handler (Enforces SSE-KMS)
+       ├── Scraper IP Rate Limiting (>100 req / 5 min)
+       ├── Broker Upload Path Protection (>50 req / 5 min on /kyc)
+       ├── AWS Managed Common Rule Set (CRS - OWASP Top 10)
+       ├── AWS Managed SQL Injection (SQLi) Protections
+       ├── AWS Managed Known Bad Inputs & Log4j (CVE-2021-44228) Rule Set
+       └── AWS Managed Amazon IP Reputation List (Tor, Scanners, Botnets)
                        │
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
- TRUST BOUNDARY 3: Isolated Network Perimeter (VPC + Free Gateway Endpoints)
+ TRUST BOUNDARY 3: Ingress & Authentication Layer (API Gateway / ALB + Cognito User Pool)
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
-           ├── VPC Gateway Endpoint: com.amazonaws.me-central-1.s3
-           └── VPC Gateway Endpoint: com.amazonaws.me-central-1.dynamodb
+       ├── Amazon Cognito User Pool (OIDC Issuer, JWT Signing, custom:tenant_id, custom:broker_id)
+       ├── API Gateway HTTP API v2 (Native JWT Authorizer, Route Throttling)
+       └── Public Application Load Balancer (TLS 1.3 Strict Termination, X-Origin-Verify Validation)
                        │
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
- TRUST BOUNDARY 4: Data Layer & Encryption (S3 KYC Vault + DynamoDB + KMS CMK)
+ TRUST BOUNDARY 4: Workload Compute Tier (ECS Fargate Containers & Serverless Handlers)
 ═══════════════════════╪═══════════════════════════════════════════════════════════════
-           ├── S3 KYC Vault (Triple-Deny Zero-Trust Policy + S3 Bucket Keys)
-           ├── DynamoDB Properties Table (KMS Encrypted + PITR)
-           └── KMS Customer Managed Key (Annual Key Rotation)
+       ├── Non-Root Task Execution (Dedicated appuser UID 10001, GID 10001)
+       ├── Read-Only Root Filesystem (Prevent runtime binary modification)
+       ├── ECR Immutable Repositories (Scan on Push, KMS CMK Encrypted)
+       └── Serverless Microservices (Listings API, KYC Presign API, Document Scanner Worker)
+                       │
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+ TRUST BOUNDARY 5: Private Network Isolation (Multi-Tier VPC 10.20.0.0/16)
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+       ├── Public Subnets (10.20.10.0/24, 10.20.11.0/24): ALB & Ingress Only
+       ├── Private Application Subnets (10.20.1.0/24, 10.20.2.0/24): ECS Tasks, Zero Public IP
+       ├── Private Database Subnets (10.20.20.0/24, 10.20.21.0/24): RDS PostgreSQL & ClickHouse Lab
+       ├── VPC Gateway Endpoints: com.amazonaws.me-central-1.s3 & dynamodb ($0.00 / hr)
+       └── VPC Flow Logs: CloudWatch Log Group with KMS CMK Encryption
+                       │
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+ TRUST BOUNDARY 6: Persistent Data Stores & Encryption (RDS + DynamoDB + S3 + KMS CMK)
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+       ├── S3 Broker KYC Vault (Triple-Deny Perimeter, S3 Bucket Keys, KMS CMK)
+       ├── S3 Immutable Audit Destination (Object Lock in COMPLIANCE mode, WORM)
+       ├── S3 Analytics Data Lake (Partitioned raw/ & curated/, Glue ETL PII Scrubbing)
+       ├── Amazon RDS PostgreSQL 16 (Forced TLS rds.force_ssl=1, Secrets Manager Credentials)
+       ├── ClickHouse Analytics Lab (IMDSv2 Hop Limit 1, Zero SSH, SSM Session Manager Only)
+       └── DynamoDB Tables (KMS Encrypted, PAY_PER_REQUEST, Point-in-Time Recovery)
+                       │
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+ TRUST BOUNDARY 7: Detective Governance & Automated SOAR Engine
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+       ├── CloudTrail Multi-Region Trail + S3 Data Event Logging (kyc-documents/*)
+       ├── AWS Config Continuous Compliance (8 Managed Rules)
+       ├── EventBridge Rules (Decoupled Schemas, SQS Dead Letter Queues)
+       ├── DynamoDB Idempotency Table (pf-soar-idempotency, Conditional Writes)
+       ├── Protected-Principals Allowlist (Bypass quarantine for root, break-glass, CI)
+       └── Automated Playbooks: S3 Lockdown & IAM Quarantine (MTTR < 1.5s)
+                       │
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+ TRUST BOUNDARY 8: Software Supply Chain & DevSecOps CI/CD
+═══════════════════════╪═══════════════════════════════════════════════════════════════
+       ├── 100% Immutable Commit SHA Pinning for all GitHub Actions
+       ├── GitHub OIDC Assume-Role Trust Scoped to Branch & Environment
+       ├── Pre-Merge Multi-Stage Scans: Gitleaks, Semgrep SAST, Checkov IaC, Trivy, CycloneDX
+       └── Dependabot Automated Vulnerability Monitoring (Actions, Python, Terraform, Docker)
 ```
 
 ---
 
-## 3. STRIDE Threat Analysis Matrix
+## 3. Comprehensive STRIDE Threat Analysis Matrix
 
-| Threat Category | Specific Threat Scenario | Threat Actor | Impact | Severity | Implemented PF-Shield Mitigation | Verification Test |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **S — Spoofing** | Adversary attempts credential stuffing or masquerades as a legitimate broker requesting presigned upload URLs. | External Scraper / Fraudster | Fraudulent document injection into KYC vault. | High | • Lambda handler strictly validates document types (`emirates_id`, `passport`, `rera_title_deed`) and file extensions.<br>• Presigned URLs are short-lived (300s expiration).<br>• IAM roles protected by Permission Boundaries. | `src/app/kyc_vault_handler.py` unit validation |
-| **T — Tampering** | Compromised IAM identity attempts to disable S3 Public Access Block or mutate bucket policies to expose KYC documents. | Compromised Broker Role / Rogue Admin | Exposure of sensitive UAE buyer/broker PII. | Critical | • `iam-boundaries` module enforces explicit Deny on `s3:PutBucketPublicAccessBlock` and `s3:DeleteBucketPolicy`.<br>• S3 Lockdown SOAR playbook re-enforces all 4 public access blocks in < 1.5 seconds. | `src/tests/test_soar_s3_lockdown.py` (passes 100%) |
-| **R — Repudiation** | Attacker disables AWS CloudTrail or deletes audit trails to erase forensic footprint during data exfiltration. | Malicious Insider | Audit trail loss, non-compliance with UAE PDPL Art. 13 & ISO 27001. | Critical | • IAM Permission Boundary explicitly denies `cloudtrail:StopLogging` and `cloudtrail:DeleteTrail`.<br>• Dedicated audit S3 bucket enforces MFA-delete, KMS encryption, and TLS-only transport. | `terraform/modules/iam-boundaries/main.tf` |
-| **I — Information Disclosure** | Competitor bot farm scrapes proprietary property listings; attacker attempts direct S3 GetObject outside the VPC. | Competitor Aggregator / External Threat Actor | Loss of proprietary listings advantage; exfiltration of Emirates IDs. | High | • API Gateway stage throttling (25 rps) + WAF rate-limiting rule (100 req/5 min).<br>• S3 Data Perimeter policy denies `s3:GetObject` if `aws:SourceVpce != aws_vpc_endpoint.s3.id`.<br>• KMS Customer Managed Key envelope encryption. | `terraform/modules/zero-trust-kyc-vault/main.tf` |
-| **D — Denial of Service** | Volumetric HTTP flood targeting Property Listings API to exhaust compute or trigger AWS billing surge (Wallet-Denial). | Botnet / Competitor | API latency degradation, unexpected cloud costs. | High | • Graviton2 `arm64` Lambda concurrency capped at `reserved_concurrent_executions = 10`.<br>• AWS Budgets alerts at 80% forecasted and 100% actual spend ($5/mo limit).<br>• API Gateway native burst throttling (50 burst / 25 rate). | `terraform/modules/finops-budget/main.tf` |
-| **E — Elevation of Privilege** | Compromised developer or CI/CD runner creates an unconstrained IAM role with AdministratorAccess. | Compromised CI Runner / Compromised Role | Full cloud control-plane takeover. | Critical | • IAM Permission Boundary denies `iam:CreateRole` unless the new role attaches the boundary ARN.<br>• SOAR IAM Quarantine playbook detects privilege escalation and attaches deny-all policy in < 2 seconds. | `src/tests/test_soar_iam_quarantine.py` (passes 100%) |
+| ID | STRIDE Category | Threat Scenario | Threat Actor | Impact | Severity | Implemented Technical Mitigation | Verification Evidence |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **TH-01** | **Spoofing** | Adversary crafts forged JWTs or injects caller-supplied `broker_id` / `tenant_id` to impersonate legitimate brokers. | Rogue Broker / Attacker | Unauthorized document upload into arbitrary tenant prefix. | **Critical** | • API Gateway validates Cognito OIDC signature & issuer.<br>• Server-side handler extracts identity from cryptographically validated claims.<br>• Caller-supplied identity fields in request bodies are rejected and ignored.<br>• Regex validation enforces `^[a-zA-Z0-9_-]{3,64}$`. | [`test_kyc_vault_handler.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_kyc_vault_handler.py) |
+| **TH-02** | **Spoofing** | Threat actor queries ALB directly via DNS, bypassing CloudFront WAF and geo-restriction. | Direct Scanner / Botnet | Bypass of rate limiting, geo-fencing, and WAF inspection. | **High** | • CloudFront forwards high-entropy secret header `X-Origin-Verify`.<br>• ALB listener rules and WAF inspect header; requests lacking exact secret are dropped with HTTP 403. | [`test_edge_security_and_waf.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_edge_security_and_waf.py) |
+| **TH-03** | **Tampering** | Rogue administrator or compromised role modifies S3 Public Access Block or bucket policy to expose KYC PII. | Compromised Identity / Insider | Public exposure of UAE Emirates IDs and passports. | **Critical** | • IAM Workload Permission Boundary denies `s3:PutBucketPublicAccessBlock` & `s3:DeleteBucketPolicy`.<br>• SOAR EventBridge rule detects public exposure.<br>• Automated S3 Lockdown playbook re-enforces all 4 public access blocks in < 1.5s. | [`test_soar_s3_lockdown.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_soar_s3_lockdown.py) |
+| **TH-04** | **Tampering** | Malicious actor modifies container binaries or injects malware into running ECS Fargate tasks. | Container Exploit Attacker | Backdoored workload container running in private subnet. | **High** | • ECS tasks execute with `readonly_root_filesystem = true`.<br>• Non-root user `appuser` (UID 10001, GID 10001).<br>• ECR image immutability (`MUTABLE = false`) and vulnerability scan on push. | [`test_services.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_services.py) |
+| **TH-05** | **Tampering** | Attacker tampers with historical security audit trails or deletes CloudTrail logs to cover tracks. | Advanced Persistent Threat | Inability to perform forensic incident reconstruction; PDPL violation. | **Critical** | • Immutable S3 audit destination with **S3 Object Lock** in **`COMPLIANCE`** mode (WORM).<br>• Retention locked for compliance duration; cannot be deleted even by AWS root.<br>• KMS CMK encryption with restricted key policy. | [`test_disaster_recovery.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_disaster_recovery.py) |
+| **TH-06** | **Repudiation** | Rogue insider disables CloudTrail logging or purges EventBridge rules to avoid detection. | Malicious Insider | Undetected exfiltration and unlogged operations. | **Critical** | • Workload Permission Boundary explicitly denies `cloudtrail:StopLogging`, `cloudtrail:DeleteTrail`, and `events:DeleteRule`.<br>• Dedicated CloudWatch and S3 audit streams with independent IAM trust boundaries. | [`terraform/modules/iam-boundaries/`](file:///Users/Yousef/pf-shield-cloud-security/terraform/modules/iam-boundaries/) |
+| **TH-07** | **Repudiation** | Attacker accesses or exfiltrates KYC documents directly from S3 without leaving audit evidence. | Malicious Caller | Silent PII exfiltration without forensic trace. | **High** | • CloudTrail S3 Data Events enabled on `kyc-documents/*`, recording every `GetObject`, `PutObject`, and `DeleteObject` event with caller ARN, IP, and timestamp. | [`terraform/modules/soar-engine/main.tf`](file:///Users/Yousef/pf-shield-cloud-security/terraform/modules/soar-engine/main.tf) |
+| **TH-08** | **Information Disclosure** | Competitor botnet scrapes public listing catalog, degrading competitive advantage and business value. | Competitor Aggregator | Wholesale real estate catalog extraction. | **High** | • CloudFront GCC geo-restriction (whitelists designated GCC/US/GB regions).<br>• WAF rate limit (100 req / 5 min).<br>• API Gateway stage throttling (25 rps / 50 burst). | [`test_edge_security_and_waf.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_edge_security_and_waf.py) |
+| **TH-09** | **Information Disclosure** | External threat actor attempts direct `s3:GetObject` on the KYC vault bucket from outside the corporate perimeter. | External Attacker | PII exfiltration over the public internet. | **Critical** | • S3 Triple-Deny Data Perimeter policy denies all access if `aws:SourceVpce != vpce-xxx` AND caller is not an authorized KYC/SOAR role.<br>• Denies unencrypted transport (`aws:SecureTransport == false`).<br>• Denies uploads not encrypted with designated KMS CMK. | [`terraform/modules/zero-trust-kyc-vault/`](file:///Users/Yousef/pf-shield-cloud-security/terraform/modules/zero-trust-kyc-vault/) |
+| **TH-10** | **Information Disclosure** | Man-in-the-Middle (MitM) eavesdropping on database transit traffic between ECS tasks and Amazon RDS. | Network Eavesdropper | Exposure of plaintext customer data and queries. | **High** | • RDS parameter group enforces `rds.force_ssl = "1"`.<br>• Relational database isolated in private subnets with 0 internet routes.<br>• Master database credentials managed via Secrets Manager with KMS CMK encryption. | [`test_analytics_and_database.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_analytics_and_database.py) |
+| **TH-11** | **Information Disclosure** | SSRF attack on ClickHouse analytics EC2 host extracts IAM role credentials via legacy IMDSv1. | SSRF Attacker | Cloud account compromise via stolen metadata credentials. | **Critical** | • Host metadata enforces IMDSv2 strictly (`http_tokens = "required"`).<br>• Hop limit locked to `http_put_response_hop_limit = 1` (blocks proxy SSRF).<br>• Zero SSH ingress (port 22 closed); management exclusively via AWS SSM Session Manager. | [`test_analytics_and_database.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_analytics_and_database.py) |
+| **TH-12** | **Information Disclosure** | Analytics data lake exposes raw landlord and broker PII in uncurated data dumps. | Analytics User | UAE PDPL violation through unvetted PII exposure. | **High** | • AWS Glue ETL pipeline ([`glue_etl_sanitize_listings.py`](file:///Users/Yousef/pf-shield-cloud-security/src/analytics/glue_etl_sanitize_listings.py)) strips phone numbers, emails, and Emirates IDs.<br>• Produces deterministic salted SHA-256 pseudonyms (`anonymized_broker_hash`). | [`test_analytics_and_database.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_analytics_and_database.py) |
+| **TH-13** | **Denial of Service** | Volumetric Layer 3/4 SYN floods or Layer 7 HTTP floods exhaust compute resources and inflate cloud bills. | DDoS Botnet | Platform downtime, wallet-denial (economic exhaustion). | **High** | • AWS Shield Standard native Layer 3/4 protection ($0.00).<br>• CloudFront global CDN absorption.<br>• WAF rate-limiting rules on `/kyc` and root paths.<br>• AWS Budgets alerts at 80% and 100% of $5/mo limit. | [`test_edge_security_and_waf.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_edge_security_and_waf.py) |
+| **TH-14** | **Denial of Service** | Malicious event replay floods SOAR engine, quarantining legitimate admin or service roles. | Malicious Insider | Operational denial of service across deployment pipelines. | **High** | • Protected-Principals allowlist protects `root`, `pf-shield-github-actions`, and `break-glass` roles.<br>• DynamoDB deduplication table (`pf-soar-idempotency`) with conditional writes prevents duplicate remediation replays. | [`test_soar_iam_quarantine.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_soar_iam_quarantine.py) |
+| **TH-15** | **Elevation of Privilege** | Compromised developer credentials or CI/CD runner creates an unconstrained IAM role with AdministratorAccess. | Compromised Identity | Full AWS account takeover. | **Critical** | • Workload Permission Boundary denies `iam:CreateRole` unless the new role attaches the boundary ARN.<br>• SOAR IAM Quarantine playbook detects privilege escalation and attaches `pf-soar-quarantine-deny-all` in < 1.5s.<br>• Deactivates all active access keys. | [`test_soar_iam_quarantine.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_soar_iam_quarantine.py) |
+| **TH-16** | **Elevation of Privilege** | Supply chain poisoning: third-party GitHub Action mutates tags to inject malicious code during deployment. | Supply Chain Attacker | Backdoored deployment into AWS production account. | **Critical** | • 100% of GitHub Actions pinned to immutable 40-character commit SHAs.<br>• GitHub Actions OIDC assume-role trust policy strictly scoped to `main` branch, `production` environment, and pull requests.<br>• Dependabot monitors updates with cryptographic SHA references. | [`test_ci_cd_and_supply_chain.py`](file:///Users/Yousef/pf-shield-cloud-security/src/tests/test_ci_cd_and_supply_chain.py) |
 
 ---
 
-## 4. Residual Risk Assessment & Acceptance
+## 4. Residual Risk Assessment & Acceptance Matrix
 
-1. **WAF Toggle for FinOps ($0.00 Idle Spend)**:
-   - *Risk*: When `enable_waf = false`, Layer 7 WAF inspection is bypassed, relying solely on API Gateway rate-limiting (25 rps).
-   - *Mitigation*: Rate-limiting at the API Gateway HTTP API stage operates at $0 cost and mitigates 95% of basic web scrapers. WAF is enabled in production via a single Terraform variable.
-2. **KMS Key Fee ($1.00/month)**:
-   - *Residual Risk*: Incurring $1/mo for a dedicated Customer Managed Key.
-   - *Acceptance Justification*: Provides cryptographic boundary separation, automated key rotation, and full compliance with UAE PDPL and ISO 27001 Annex A.8.24. S3 Bucket Keys reduce operational request costs by 99%.
+| Risk ID | Residual Risk Description | Risk Acceptance Rationale | Compensating Security Controls | Review Frequency |
+| :--- | :--- | :--- | :--- | :--- |
+| **RR-01** | **WAF Disabled in Demo Profile** (`demo.tfvars`): When running the low-cost evaluation profile, AWS WAFv2 is disabled to achieve $0.00 idle run rate. | Acceptable for non-production demonstration, automated unit testing, and sandbox verification. | API Gateway native stage rate-limiting (25 rps / 50 burst) remains active at $0.00 cost; WAF is unconditionally enabled in `production.tfvars`. | Quarterly |
+| **RR-02** | **KMS CMK Baseline Cost ($1.00/mo)**: Incurring $1/month per Customer Managed Key in demo environment. | Justified to demonstrate envelope encryption, cryptographic separation, and key rotation per UAE PDPL Art. 13. | S3 Bucket Keys reduce operational request costs by 99% ($0.003/mo). | Annual |
+| **RR-03** | **Shield Standard vs Shield Advanced**: Shield Advanced ($3,000/mo + 1-year commit) is omitted. | Platform volume does not justify $36,000/year minimum spend. | AWS Shield Standard ($0.00) handles Layer 3/4 attacks; CloudFront CDN absorbs volumetric edge traffic; WAF rate-limiting protects Layer 7. | Semi-Annual |
+| **RR-04** | **ClickHouse Host Bastionless Administration**: EC2 ClickHouse node relies on SSM Session Manager without direct console access. | Eliminates SSH exposure (port 22 closed), brute-force vectors, and SSH key management overhead. | SSM Session Manager commands are encrypted via KMS and fully logged to CloudWatch Logs with audit retention. | Semi-Annual |
+| **RR-05** | **CloudFront Default Certificate in me-central-1**: Default `*.cloudfront.net` domain used in evaluation environment. | Custom ACM certificates for CloudFront must be issued in `us-east-1`, whereas regional resources reside in `me-central-1`. | TLS 1.3 enforced; production custom domains require us-east-1 ACM certificate validation with DNS CNAME records. | Annual |

@@ -1,34 +1,149 @@
 # PF-Shield — Zero-Trust Real Estate API & Automated Cloud SOAR
 
 [![DevSecOps Pipeline](https://img.shields.io/badge/CI%2FCD-DevSecOps%20Pipeline-success?style=for-the-badge&logo=github-actions)](.github/workflows/devsecops-pipeline.yml)
-[![Monthly Run Rate](https://img.shields.io/badge/FinOps%20Run%20Rate-%240.00%20--%20%241.10%20%2F%20mo-brightgreen?style=for-the-badge&logo=amazon-aws)](docs/WELL_ARCHITECTED_REVIEW.md)
-[![Compliance](https://img.shields.io/badge/Compliance-UAE%20PDPL%20%7C%20ISO%2027001%20%7C%20SOC%202-blue?style=for-the-badge&logo=securityscorecard)](docs/COMPLIANCE_MAPPING.md)
-[![Checkov Audit](https://img.shields.io/badge/Checkov%20IaC-166%20Passed%20%7C%200%20Failed-success?style=for-the-badge&logo=paloaltonetworks)](docs/EVIDENCE.md)
+[![Automated Tests](https://img.shields.io/badge/Tests-44%20Passed%20%7C%20100%25-brightgreen?style=for-the-badge&logo=pytest)](docs/EVIDENCE.md)
+[![Checkov IaC Audit](https://img.shields.io/badge/Checkov%20IaC-788%20Passed%20%7C%200%20Failed-success?style=for-the-badge&logo=paloaltonetworks)](docs/EVIDENCE.md)
+[![Compliance Framework](https://img.shields.io/badge/Compliance-UAE%20PDPL%20%7C%20ISO%2027001%20%7C%20SOC%202-blue?style=for-the-badge&logo=securityscorecard)](docs/COMPLIANCE_MAPPING.md)
+[![FinOps Idle Run Rate](https://img.shields.io/badge/FinOps%20Run%20Rate-%240.00%20--%20%241.10%20%2F%20mo-brightgreen?style=for-the-badge&logo=amazon-aws)](docs/WELL_ARCHITECTED_REVIEW.md)
 
 ---
 
-## 1. Executive Overview
+## Executive Summary
 
-**PF-Shield** is a production-grade, cost-optimized AWS cloud security control plane and automated incident response (SOAR) platform engineered for cloud-native real estate platforms in the **United Arab Emirates (UAE)**.
+**PF-Shield** is an enterprise-grade cloud security control plane and automated incident response (SOAR) platform engineered for cloud-native real estate platforms in the **United Arab Emirates (UAE)** deployed in region `me-central-1`.
 
-Real estate platforms handle millions of property listings and tens of thousands of sensitive broker and tenant identity documents (Emirates IDs, passport scans, and RERA title deeds). Securing these assets requires reconciling two competing operational demands:
-1. **Uncompromising Zero-Trust Security & Sovereign Compliance**: Strict alignment with **UAE Personal Data Protection Law (PDPL - Federal Decree-Law No. 45 of 2021)** data residency mandates in region `me-central-1`, ISO/IEC 27001:2022 Annex A, and SOC 2 Type II trust services criteria.
-2. **Aggressive FinOps Cost Optimization**: Delivering a full security control plane — encompassing IAM permission boundaries, triple-deny data perimeters, envelope encryption, automated threat containment (< 1.5s MTTR), observability, and shift-left Kubernetes policies — at an idle run rate of **$0.00 – $1.10 / month**, compared to a naive enterprise deployment costing **$165+/month**.
+Real estate platforms handle public listing catalogs alongside sensitive broker and tenant identity records (Emirates IDs, passport scans, and RERA title deeds). PF-Shield reconciles two competing operational imperatives:
+1. **Uncompromising Zero-Trust Security & Sovereign Compliance**: Strict technical alignment with **UAE Personal Data Protection Law (PDPL - Federal Decree-Law No. 45 of 2021)** data residency mandates in `me-central-1`, ISO/IEC 27001:2022 Annex A, SOC 2 Type II trust services criteria, and CIS AWS Foundations Benchmark v3.0.
+2. **Aggressive FinOps Cost Optimization**: Delivering a comprehensive security architecture — encompassing IAM permission boundaries, triple-deny data perimeters, envelope encryption, automated threat containment (< 1.5s MTTR), immutable audit destinations, and shift-left supply chain security — at an idle evaluation run rate of **$0.00 – $1.10 / month**, compared to a naive enterprise deployment costing **$450+/month**.
 
 ---
 
-## 2. Contents (Repository Navigation & Table of Contents)
+## Portfolio Evaluation Summary
 
-### README Table of Contents
-- [1. Executive Overview](#1-executive-overview)
-- [2. Contents (Repository Navigation & Table of Contents)](#2-contents-repository-navigation--table-of-contents)
-- [3. Visual Architecture Diagram](#3-visual-architecture-diagram)
-- [4. Tool Selection Rationale & Tradeoffs](#4-tool-selection-rationale--tradeoffs)
-- [5. Architecture Assumptions & Environment Profiles](#5-architecture-assumptions--environment-profiles)
-- [6. Architecture & Tenancy Deep Dive](#6-architecture--tenancy-deep-dive)
-- [7. Step-by-Step Deployment Runbook](#7-step-by-step-deployment-runbook)
-- [8. Production Incident Post-Mortems](#8-production-incident-post-mortems)
-- [9. Cost Notes & Teardown Protocol](#9-cost-notes--teardown-protocol)
+For technical evaluators, assessors, and hiring managers, this repository is structured around four concise evaluation sections:
+
+### 1. Platform Architecture
+
+PF-Shield is architected as a modular, multi-tier cloud platform with clear security boundaries:
+
+```
+[ External Scrapers & Global Clients ]
+                  │
+                  ▼
+   [ Amazon CloudFront CDN ]  <─── TLS 1.3, HTTP/3, GCC Geo-Restriction (AE, SA, BH, KW, OM, QA, US, GB)
+                  │                Response Security Headers (HSTS Preload, nosniff, DENY)
+                  │                Origin Authentication: X-Origin-Verify (High-Entropy Secret)
+                  ▼
+       [ AWS WAFv2 WebACL ]   <─── 6 Prioritized Rule Sets (Scrapers, /kyc, CRS, SQLi, Log4j, Botnets)
+                  │
+                  ▼
+  ┌───────────────────────────────┐
+  │   Public Ingress Tier (ALB)   │  <─── Public Subnets (10.20.10.0/24, 10.20.11.0/24)
+  └───────────────┬───────────────┘
+                  │  (Forwarding strictly over private subnets; Direct ALB access without secret blocked)
+                  ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                 Private Application Tier (ECS on Fargate)               │
+  │  • Private App Subnets (10.20.1.0/24, 10.20.2.0/24) — Zero Public IPs  │
+  │  • Non-Root appuser (UID 10001) | Read-Only Root Filesystem             │
+  │  • ECR Immutable Repositories with KMS CMK & Scan on Push               │
+  │                                                                         │
+  │   [ Listings API ]         [ Broker KYC API ]     [ Document Scanner ]  │
+  │   (Catalog Query)          (Cognito OIDC Auth)    (Malware/EICAR Scan)  │
+  └───────┬───────────────────────────┬──────────────────────────┬──────────┘
+          │                           │                          │
+          ▼                           ▼                          ▼
+  ┌──────────────────┐   ┌───────────────────────────┐   ┌──────────────────┐
+  │  DynamoDB Table  │   │     S3 KYC Vault Bucket   │   │  Audit S3 Bucket │
+  │ • KMS Encrypted  │   │ • Triple-Deny Perimeter   │   │ • S3 Object Lock │
+  │ • PAY_PER_REQUEST│   │ • SSE-KMS CMK Envelope    │   │ • COMPLIANCE Mode│
+  │ • PITR Enabled   │   │ • S3 Bucket Keys (99% cut)│   │ • WORM Immutabled│
+  └──────────────────┘   └───────────────────────────┘   └──────────────────┘
+          ▲                           ▲
+          │                           │
+  ════════╧═══════════════════════════╧══════════════════════════════════════
+    AWS VPC Gateway Endpoints: s3 & dynamodb ($0.00/hr, Zero NAT Fee)
+  ═══════════════════════════════════════════════════════════════════════════
+          │
+          ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                  Private Database Tier (Zero Public Routes)             │
+  │  • Private DB Subnets (10.20.20.0/24, 10.20.21.0/24)                    │
+  │  • Amazon RDS PostgreSQL 16: KMS CMK, Secrets Manager, rds.force_ssl=1  │
+  │  • ClickHouse Analytics Lab: IMDSv2 Hop Limit 1, Zero SSH (SSM Only)    │
+  │  • S3 Analytics Lake & AWS Glue ETL: PII Scrubbing & Broker Hash Salt   │
+  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Microservices Functionality**:
+  - `services/listings-api`: High-performance public real estate catalog query service backed by DynamoDB on-demand.
+  - `services/broker-kyc-api`: Authenticated broker upload endpoint verifying Cognito JWTs and issuing short-lived presigned S3 POST policies with cryptographic KMS conditions.
+  - `services/document-scan-worker`: Asynchronous malware scanner detecting EICAR patterns, validating file magic bytes, tagging S3 objects (`scan_status = CLEAN | INFECTED`), and publishing alerts to SNS.
+- **Security Boundaries**:
+  - **Edge Boundary**: CloudFront + WAFv2 drops unauthorized geo-traffic, rate-limits scrapers, and passes `X-Origin-Verify` token.
+  - **Network Boundary**: Multi-tier VPC (`10.20.0.0/16`) segregates public ingress from private compute and private databases. Free VPC Gateway Endpoints keep S3 and DynamoDB traffic internal.
+  - **Compute Boundary**: Containers run under dedicated unprivileged user `appuser` (UID `10001`, GID `10001`) with immutable read-only root filesystems.
+  - **Data Boundary**: S3 Triple-Deny policy enforces TLS-only, mandatory KMS CMK encryption, and blocks access originating outside the private VPC Gateway Endpoint.
+
+---
+
+### 2. Security Controls Implemented
+
+| Security Domain | Implemented Technical Controls | Standard Mapping |
+| :--- | :--- | :--- |
+| **Identity & Access Management** | • **Cognito OIDC User Pool**: Issues signed JWTs with custom tenant and broker claims (`custom:tenant_id`, `custom:broker_id`).<br>• **Server-Side Identity Derivation**: Application handlers strictly reject and ignore caller-supplied `broker_id` or `tenant_id` fields in request bodies; identities are extracted cryptographically from validated claims.<br>• **Workload Permission Boundary**: Enforces region `me-central-1`, prevents boundary removal, and denies privilege escalation.<br>• **Dedicated SOAR Boundary**: Decoupled containment permissions allowing remediation playbooks to execute `s3:PutBucketPublicAccessBlock` and attach quarantine deny-all policies.<br>• **Protected-Principals Allowlist**: Evaluates targets against an allowlist (`root`, `pf-shield-github-actions`, `break-glass`), bypassing automated containment for trusted identities to prevent denial-of-service on operations. | • UAE PDPL Art. 13<br>• ISO 27001 A.9.2<br>• CIS AWS v3.0 1.x |
+| **Network & Perimeter** | • **Multi-Tier VPC** (`10.20.0.0/16`): Public ALB subnets, private application subnets, private database subnets with 0 internet routes.<br>• **CloudFront Edge Defense**: HTTP/3, TLS 1.3, GCC geo-restrictions (`AE`, `SA`, `BH`, `KW`, `OM`, `QA`, `US`, `GB`), modern response headers (HSTS preload, `X-Frame-Options: DENY`, `nosniff`).<br>• **Shared-Secret Origin Authentication**: ALB listener rules drop requests lacking `X-Origin-Verify`.<br>• **AWS WAFv2**: 6 prioritized rules (Scraper rate limit, `/kyc` upload rate limit, AWS Managed Common Rule Set, SQLi, Known Bad Inputs/Log4j, Amazon IP Reputation).<br>• **Host Bastionless Hardening**: ClickHouse EC2 node enforces IMDSv2 (`http_tokens = required`, `hop_limit = 1`), encrypted EBS, zero SSH ingress (port 22 closed), and SSM Session Manager administration. | • UAE PDPL Art. 13<br>• ISO 27001 A.13.1<br>• SOC 2 CC6.6 |
+| **Data Protection & Cryptography** | • **S3 Triple-Deny Perimeter**: Enforces `aws:SecureTransport`, mandatory KMS CMK encryption, and VPC Gateway Endpoint source restrictions.<br>• **S3 Object Lock (`COMPLIANCE` Mode)**: Immutable WORM audit destination prevents log deletion or alteration by any principal, including root.<br>• **KMS Customer Managed Key (CMK)**: AES-256 envelope encryption with annual rotation, key administration separation, and S3 Bucket Keys (99% KMS request fee reduction).<br>• **Amazon RDS PostgreSQL 16**: Storage encrypted with KMS CMK, transit encrypted via `rds.force_ssl = "1"`, master credentials managed dynamically via AWS Secrets Manager with KMS CMK encryption.<br>• **AWS Glue ETL PII Scrubbing**: Strips landlord and broker phone numbers, emails, and Emirates IDs; derives salted SHA-256 pseudonyms (`anonymized_broker_hash`). | • UAE PDPL Art. 13, 14<br>• ISO 27001 A.10.1<br>• SOC 2 CC6.1 |
+| **Detection & Automated Response (SOAR)** | • **Multi-Region CloudTrail + S3 Data Events**: Captures granular `GetObject` and `PutObject` events on `kyc-documents/*`.<br>• **AWS Config Continuous Compliance**: 8 managed compliance rules monitoring public buckets, volume encryption, open ports, default security groups, IMDSv2, RDS public access, and key rotation.<br>• **Decoupled EventBridge Rules & SQS DLQs**: Zero dropped alert SLA with dead-letter queue backup.<br>• **DynamoDB Event Idempotency**: Deduplicates EventBridge alerts using TTL-backed table (`pf-soar-idempotency`) with conditional writes.<br>• **Sub-1.5s Automated Playbooks**: S3 Lockdown (re-locks all 4 public access blocks) and IAM Quarantine (attaches `pf-soar-quarantine-deny-all` and deactivates access keys). | • UAE PDPL Art. 13<br>• ISO 27001 A.16.1<br>• SOC 2 CC7.3 |
+| **Disaster Recovery & Data Restoration** | • **S3 Delete Marker Recovery**: Zero data loss (RPO = 0) recovery from accidental or malicious deletions via delete marker rollback.<br>• **Continuous Point-in-Time Recovery (PITR)**: DynamoDB continuous backup and RDS continuous WAL archiving (RTO < 60 min, RPO < 15 min).<br>• **Tested Disaster Recovery Runbook**: Step-by-step procedures in [`RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md`](docs/runbooks/RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md). | • ISO 27001 A.17.1<br>• SOC 2 CC9.1 |
+| **Software Supply Chain & DevSecOps** | • **100% Immutable Commit SHA Pinning**: Every GitHub Action in all workflows is pinned to an immutable 40-character hexadecimal commit SHA.<br>• **Scoped GitHub OIDC Trust Policy**: IAM assume-role trust strictly scoped to repository, `main` branch, and `production` environment.<br>• **Multi-Stage CI/CD Security Pipeline**: Gitleaks secret detection, Semgrep SAST, Checkov IaC, Trivy container scanning, CycloneDX SBOM generation, Cosign verification, and Dependabot monitoring. | • ISO 27001 A.14.2<br>• NIST CSF 2.0 C-SCRM<br>• SOC 2 CC8.1 |
+
+---
+
+### 3. Validation Evidence
+
+All security claims, architectural invariants, and containment SLAs in PF-Shield are backed by empirical, reproducible tests:
+
+- **Automated Test Suite**: **44 / 44 Passing (100%)** across 8 test suites ([`docs/EVIDENCE.md`](docs/EVIDENCE.md#2-live-automated-test-suite-execution-log)):
+  - `test_kyc_vault_handler.py`: Validates Cognito JWT authentication, rejection of caller-supplied `broker_id`, regex path traversal mitigation, and server-side S3 prefix construction (`10/10 passed`).
+  - `test_soar_iam_quarantine.py`: Proves sub-1.5s IAM credential deactivation, deny-all attachment, EventBridge replay idempotency, protected-principals bypass, and human-approval containment mode (`5/5 passed`).
+  - `test_soar_s3_lockdown.py`: Proves S3 public access block restoration in < 1.5s, idempotency deduplication, and protected-principal handling (`5/5 passed`).
+  - `test_services.py`: Validates containerized microservices health probes, broker upload presigning, and document malware scanner lifecycle (`3/3 passed`).
+  - `test_disaster_recovery.py`: Validates S3 delete marker recovery (RPO = 0), object version rollback, DynamoDB PITR, and S3 Object Lock compliance immutability (`5/5 passed`).
+  - `test_analytics_and_database.py`: Validates Glue ETL PII scrubbing, salted SHA-256 broker pseudonymization, RDS forced TLS parameter enforcement, Secrets Manager credential structure, and ClickHouse IMDSv2 hop limit 1 host hardening (`8/8 passed`).
+  - `test_edge_security_and_waf.py`: Validates CloudFront response security headers, WAFv2 6-rule hierarchy, CloudWatch edge security alarms, and Shield Standard vs Advanced justification matrix (`4/4 passed`).
+  - `test_ci_cd_and_supply_chain.py`: Enforces 100% 40-character SHA pinning across all GitHub Action workflows, Dependabot coverage, and OIDC trust policy branch scoping (`4/4 passed`).
+- **Policy-as-Code Static Analysis**: **788 Checks Passed | 0 Failures | 180 Skipped (with documented rationale)** across main Terraform and bootstrap modules ([`docs/EVIDENCE.md`](docs/EVIDENCE.md#3-checkov-iac-security-scan-log)).
+- **SOAR Mean Time to Remediate (MTTR)**: Measured containment latency of **< 1.5 seconds** from event detection to full lockdown.
+- **Disaster Recovery Proofs**: Verified RTO < 60 minutes and RPO < 15 minutes for databases; verified RPO = 0 for S3 object deletions.
+- **Terminal Failure & Incident Evidence**: Three comprehensive incident post-mortems documenting root-cause analysis, corrective actions, and terminal screenshot evidence in [`docs/EVIDENCE.md`](docs/EVIDENCE.md#7-comprehensive-incident-post-mortem-log).
+
+---
+
+### 4. Trade-Offs & Architectural Assumptions
+
+| Dimension | Demonstration Profile (`demo.tfvars`) | Production Baseline (`production.tfvars`) | Architectural Rationale & Trade-Off |
+| :--- | :--- | :--- | :--- |
+| **Operational Purpose** | Low-cost developer evaluation, CI/CD automated gates, and simulated attack replay. | 24/7 enterprise production under UAE PDPL & ISO 27001 sovereign compliance. | Decoupled profiles prevent developer cost accumulation while preserving enterprise security configurations. |
+| **Idle Monthly Cost** | **$0.00 – $1.10 / month** (scale-to-zero serverless, free Gateway Endpoints). | **~$18.00 – $45.00 / month** (base production) to **~$250.00 / month** (high-traffic). | Demo uses scale-to-zero serverless and 0-desired-count ECS; production maintains warm Multi-AZ capacity. |
+| **AWS WAFv2** | Disabled by default (`enable_waf = false`) to eliminate hourly WebACL fees ($5.00/mo). | Enabled with 6 inspection rules protecting CloudFront and ALB. | Demo relies on API Gateway native stage rate limiting (25 rps / 50 burst) at $0.00 cost. |
+| **GuardDuty & Security Hub** | Feature-flagged off; attacks simulated via local EventBridge payloads. | Enabled with continuous S3 protection and Security Hub compliance standards. | Decoupled simulation schemas allow testing SOAR playbooks without paying standing service fees. |
+| **Log Retention** | Aggressive 7-day expiration across all CloudWatch log groups and S3 buckets. | 365-day compliance retention with S3 Glacier tiering and Object Lock. | FinOps guardrail prevents unbounded storage billing in evaluation environments. |
+| **Data Deletion Protection** | `force_destroy = true` on S3 buckets for 1-click teardown. | `force_destroy = false` and S3 Object Lock in `COMPLIANCE` mode. | Demo allows clean resource decommissioning; production strictly prevents data loss. |
+| **AWS Shield Tier** | **AWS Shield Standard ($0.00 / month)**. | **AWS Shield Standard** (Shield Advanced requires formal business justification). | Shield Advanced ($3,000/mo + 1-year commit) is omitted because platform traffic volume does not justify $36,000/yr spend. |
+| **Legal Compliance Scope** | Technical architecture mapping only. | Technical architecture mapping only. | **Legal Disclaimer**: Region selection (`me-central-1`) and technical controls do not constitute legal compliance. Full UAE PDPL certification requires formal legal counsel review, appointed Data Protection Officer (DPO), and operational privacy workflows. |
+
+---
+
+## Visual Architecture Overview
+
+![PF-Shield Architecture Overview](docs/architecture-overview.png)
+
+*Figure 1: PF-Shield Zero-Trust Cloud Security & SOAR Architecture.*
+
+---
+
+## Contents (Repository Navigation & Table of Contents)
 
 ### Repository Directory Map
 - [`terraform/`](terraform/): 100% modular Infrastructure-as-Code root configuration.
@@ -69,246 +184,19 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`verify_region_services.sh`](scripts/verify_region_services.sh): Regional service parity verifier (`me-central-1` vs `me-south-1`).
   - [`generate_architecture_diagram.py`](scripts/generate_architecture_diagram.py): Visual architecture diagram generator.
 - [`docs/`](docs/): Complete governance documentation:
-  - [`docs/EVIDENCE.md`](docs/EVIDENCE.md): Auditable verification proofs and terminal failure screenshots for every section.
-  - [`docs/THREAT_MODEL_STRIDE.md`](docs/THREAT_MODEL_STRIDE.md): Comprehensive STRIDE threat model mapped to real estate platform assets.
-  - [`docs/COMPLIANCE_MAPPING.md`](docs/COMPLIANCE_MAPPING.md): Regulatory matrix mapping to UAE PDPL, ISO 27001, and SOC 2.
+  - [`docs/EVIDENCE.md`](docs/EVIDENCE.md): Auditable verification proofs, live test logs, Checkov scans, and terminal failure screenshots.
+  - [`docs/THREAT_MODEL_STRIDE.md`](docs/THREAT_MODEL_STRIDE.md): Comprehensive 8-boundary STRIDE threat model mapped to real estate assets.
+  - [`docs/COMPLIANCE_MAPPING.md`](docs/COMPLIANCE_MAPPING.md): Regulatory matrix mapping to UAE PDPL, ISO 27001, SOC 2, NIST CSF 2.0, and CIS AWS v3.0.
   - [`docs/WELL_ARCHITECTED_REVIEW.md`](docs/WELL_ARCHITECTED_REVIEW.md): Detailed 6-pillar Well-Architected Framework review.
   - [`docs/REGIONAL_SERVICE_AVAILABILITY.md`](docs/REGIONAL_SERVICE_AVAILABILITY.md): `me-central-1` vs `me-south-1` feature parity audit.
-  - [`docs/runbooks/`](docs/runbooks/): Step-by-step incident response and operational runbooks for compromised credentials, S3 exfiltration, and disaster recovery/backup restoration.
+  - [`docs/runbooks/`](docs/runbooks/): Step-by-step incident response and operational runbooks:
+    - [`RUNBOOK-01-Compromised-IAM-Credentials.md`](docs/runbooks/RUNBOOK-01-Compromised-IAM-Credentials.md)
+    - [`RUNBOOK-02-S3-Bucket-Data-Exfiltration.md`](docs/runbooks/RUNBOOK-02-S3-Bucket-Data-Exfiltration.md)
+    - [`RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md`](docs/runbooks/RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md)
 
 ---
 
-## 3. Visual Architecture Diagram
-
-![PF-Shield Architecture Overview](docs/architecture-overview.png)
-
-*Figure 1: PF-Shield Zero-Trust Cloud Architecture.*
-
----
-
-## 4. Tool Selection Rationale & Tradeoffs
-
-| Component | Selected Technology | Considered Alternatives | Rationale for Selection | Architectural Tradeoffs |
-| :--- | :--- | :--- | :--- | :--- |
-| **VPC Connectivity** | **VPC Gateway Endpoints** (`s3`, `dynamodb`) | AWS NAT Gateway ($32+/mo), Transit Gateway | Eliminates $32.85/mo hourly NAT fee; traffic never leaves AWS internal backplane ($0.00/hr). | Gateway Endpoints support S3 and DynamoDB only; other AWS services require Interface Endpoints or public DNS. |
-| **Compute Engine** | **AWS Lambda (`arm64` Graviton2)** | AWS ECS Fargate, EKS Managed Nodes | $0.00 idle compute cost; scale-to-zero; Graviton2 yields 20% lower cost and lower cold-start latency. | 15-minute execution limit; cold starts require optimization (managed by keeping dependencies lightweight). |
-| **Edge API Layer** | **API Gateway HTTP API (v2)** | API Gateway REST API, Application Load Balancer | 70% cheaper than REST API; native stage burst rate limiting (50 burst / 25 rate) provides $0 anti-scraping. | Lacks request validation mapping templates (handled within Lambda application code). |
-| **Data Encryption** | **KMS CMK + S3 Bucket Keys** | AWS Managed Key (`aws/s3`), Client-Side Encryption | Fulfills UAE PDPL Art. 13 cryptographic separation; S3 Bucket Keys reduce KMS request fees by 99%. | Incurs a baseline $1.00/month fee for the Customer Managed Key. |
-| **Event Routing** | **Amazon EventBridge** | CloudWatch Logs Metric Filters, SNS Fanout | Native content filtering on CloudTrail and GuardDuty schemas; decoupled, declarative JSON event rules. | EventBridge bus adds up to ~1.5s latency compared to synchronous webhooks. |
-| **Container Governance** | **Kyverno Policy-as-Code (CI CLI)** | Live EKS Cluster + OPA Gatekeeper | Validates Kubernetes security policies shift-left without incurring $73.00/month for an idle EKS control plane. | Policies validated at build time in CI rather than live admission webhook enforcement. |
-| **Edge DDoS Defense** | **AWS Shield Standard + WAFv2** | AWS Shield Advanced ($3,000/mo) | Automatic Layer 3/4 DDoS protection ($0.00) paired with custom rate-limiting WAF rules; maintains FinOps cost guardrails. | Does not provide financial cost protection for auto-scaling DDoS spikes or 24/7 dedicated Shield Response Team. |
-| **Edge Acceleration & TLS** | **CloudFront + Custom Header Origin Auth** | Direct ALB Exposure | Terminates TLS 1.3 at global edge locations, enforces modern security headers, and validates `X-Origin-Verify` at the ALB. | Introduces edge-to-origin latency overhead when requests miss cache. |
-
----
-
-## 5. Architecture Assumptions & Environment Profiles
-
-### 5.1 Vendor-Neutral Architecture & Public Inspiration
-PF-Shield is intentionally engineered as a **vendor-neutral, cloud-security reference architecture** broadly applicable to real estate, marketplace, and data-intensive platforms. External public cloud case studies (e.g., containerized microservices behind ALBs, automated incident containment, and analytics security) serve strictly as architectural inspiration rather than an internal implementation of any single commercial entity.
-
-### 5.2 Environment Profiles: Demonstration vs Production Baseline
-
-To reconcile rigorous enterprise security with developer FinOps, PF-Shield provides two explicit, decoupled Terraform profiles:
-
-| Dimension | Demonstration Profile (`demo.tfvars`) | Production Baseline (`production.tfvars`) |
-| :--- | :--- | :--- |
-| **Operational Purpose** | Low-cost local verification, CI/CD pipelines, and simulated attack replay. | 24/7 sovereign enterprise operations under UAE PDPL & ISO 27001. |
-| **Idle Run Rate** | **$0.00 – $1.10 / month** (scale-to-zero serverless, free VPC Gateway Endpoints). | **~$12.00 – $250.00 / month** (depending on cluster capacity & managed logs). |
-| **AWS WAFv2** | Disabled by default (`enable_waf = false`) to eliminate hourly WebACL fees. | Enabled with Managed Common Rules, SQLi, and IP rate-limiting rules. |
-| **Amazon GuardDuty & Security Hub** | Feature-flagged off; attacks simulated via local EventBridge payloads. | Enabled with continuous S3 protection and automated finding ingestion. |
-| **Log Retention** | Aggressive 7-day expiration to prevent storage accumulation. | Multi-year compliance retention with immutable S3 audit destinations. |
-| **Data Deletion Protection** | `force_destroy = true` on S3 buckets for 1-click teardown. | `force_destroy = false` and Object Lock enabled to prevent data loss. |
-| **Security Caveat** | > [!WARNING]<br>> **Do not represent `demo.tfvars` as production-secure.** It is an economical test harness. | Full security, detective, and preventative controls active. |
-
-### 5.3 Hardened SOAR Automation Architecture
-
-The SOAR engine (`terraform/modules/soar-engine/`) incorporates key operational reliability patterns:
-1. **Dedicated SOAR Permissions Boundary**: Resolves the classic boundary-conflict bug where standard workload permission boundaries deny `s3:PutBucketPublicAccessBlock` to the remediation Lambda. The dedicated SOAR boundary permits only explicit containment actions (`s3:PutBucketPublicAccessBlock`, `iam:AttachRolePolicy`, `iam:UpdateAccessKey`, `dynamodb:PutItem`, and scoped SNS/SQS telemetry).
-2. **Protected-Principals Allowlist**: Evaluates all targets against an allowlist (`root`, `AWSServiceRole`, `pf-shield-github-actions`, `security-admin`, `break-glass`). If an alert involves a protected identity, automatic quarantine is safely bypassed, preventing denial-of-service on operations, and escalated for immediate human review.
-3. **DynamoDB Event Idempotency**: Deduplicates EventBridge alerts using a TTL-backed table (`pf-soar-idempotency-${environment}`) with conditional writes (`attribute_not_exists(event_id)`), ensuring at-most-once remediation.
-4. **Dual Containment Modes**: Supports `AUTOMATIC` (immediate quarantine and S3 lockdown) and `HUMAN_APPROVAL` (generates structured forensic proposals awaiting engineer sign-off).
-
----
-
-## 6. Architecture & Tenancy Deep Dive
-
-```
-[ External Scrapers & Threat Actors ]
-                 │
-                 ▼
-     [ AWS WAFv2 WebACL ]  <─── (Rate-based rules: >100 req/5m blocked)
-                 │
-                 ▼
-  [ API Gateway HTTP API ($default) ]  <─── (Throttling: 25 rps / 50 burst)
-                 │
-      ┌──────────┴──────────┐
-      ▼                     ▼
-[ Property Listings ]  [ KYC Presign Handler ]
-(DynamoDB Read)       (Issues 300s KMS Presigned URL)
-      │                     │
-      └──────────┬──────────┘
-                 ▼
-═════════════════════════════════════════════════════════════════════════
-  PRIVATE VPC DATA PERIMETER (10.20.0.0/16 — Zero Public Routes)
-═════════════════════════════════════════════════════════════════════════
-                 │
-       ┌─────────┴─────────┐
-       ▼                   ▼
- [ S3 Gateway VPCE ]  [ DynamoDB Gateway VPCE ]
-       │                   │
-       ▼                   ▼
-[ S3 KYC Vault ]     [ Properties Metadata Table ]
- • Triple-Deny Policy  • PAY_PER_REQUEST ($0 idle)
- • S3 Bucket Key (99%) • KMS CMK Encrypted
- • 7-day Log Expiry    • Point-in-Time Recovery
-```
-
-### 1. Zero-Trust S3 Data Perimeter
-The broker KYC vault (`aws_s3_bucket.kyc_vault`) stores confidential UAE PII. Access is guarded by a triple-deny policy:
-- **Statement 1 (`DenyInsecureTransport`)**: Denies all API operations unless `aws:SecureTransport == true`.
-- **Statement 2 (`DenyUnencryptedUploads`)**: Denies `s3:PutObject` unless server-side encryption is explicitly set to `aws:kms`.
-- **Statement 3 (`EnforceDataPerimeter`)**: Denies `s3:GetObject` and `s3:PutObject` if the caller originates outside the VPC Gateway Endpoint (`aws:SourceVpce != vpce-xxx`) AND is not an explicitly authorized KYC or SOAR Lambda role.
-
-### 2. IAM Permission Boundaries & Privilege Escalation Prevention
-All application roles attach `pf-workload-permission-boundary`, enforcing:
-- Regional scoping strictly to `me-central-1`.
-- Explicit Deny on `iam:DeleteRolePermissionsBoundary` (boundary cannot be removed).
-- Explicit Deny on `iam:CreateRole` unless the new role attaches the boundary ARN (prevents privilege escalation).
-- Explicit Deny on tampering with S3 Public Access Block, bucket policies, or CloudTrail logging.
-
-### 3. Automated Incident Response (SOAR Engine)
-When an unauthorized identity attempts S3 public access exposure or IAM privilege escalation:
-1. EventBridge matches the CloudTrail or GuardDuty event pattern.
-2. If Lambda execution throttles, the attached SQS Dead Letter Queue captures the event (zero dropped alert SLA).
-3. The SOAR Lambda attaches `pf-soar-quarantine-deny-all` to the offending principal, restores all 4 S3 Public Access Block flags to `True`, deactivates all active access keys, and publishes a structured forensic alert to SNS in **< 1.5 seconds**.
-
-### 4. Broker Identity & Multi-Tenant KYC Zero-Trust Authorization
-Handling sensitive broker identity records (Emirates IDs, passports, title deeds) requires defense-in-depth access controls:
-- **Edge Token Verification**: Amazon Cognito User Pool (`pf-shield-broker-pool`) issues signed JWTs with custom tenant and broker claims (`custom:tenant_id`, `custom:broker_id`, `custom:role`). API Gateway HTTP API enforces native JWT authorizer verification against the Cognito OIDC issuer and audience.
-- **Server-Side Identity Derivation**: The application handler strictly rejects and ignores caller-supplied `broker_id` or `tenant_id` fields in request bodies. Identity claims are cryptographically extracted and verified server-side.
-- **Path Traversal & Injection Prevention**: Tenant and broker identifiers are regex-validated (`^[a-zA-Z0-9_-]{3,64}$`) to prevent directory traversal (`../`) or unauthorized namespace escaping.
-- **Isolated Prefix Construction**: S3 object keys are generated strictly on the server:
-  ```text
-  kyc-documents/{tenant_id}/{broker_id}/{doc_type}/{uuid}.{file_ext}
-  ```
-- **Presigned POST Policy Enforcement**: S3 credentials are issued via presigned POST policies containing cryptographic policy conditions: exact key match, mandatory `aws:kms` SSE algorithm, KMS CMK key ARN, file size range (1 KB minimum, 10 MB maximum), and allowed MIME types.
-- **Lifecycle Audit State Tracking**: Every presigned upload immediately generates an audit record in DynamoDB (`pf-properties-metadata`) initialized to `pending_scan`, ensuring unverified files cannot be accessed or served prior to malware and integrity verification.
-
-### 5. Containerized Microservices Platform & Private Network Perimeter
-To demonstrate cloud-native workload security, the platform provisions containerized microservices on **Amazon ECS on Fargate** across private subnets behind an **Application Load Balancer**:
-- **Multi-Tier Subnet Topology**:
-  - `Public Subnets` (`10.20.10.0/24`, `10.20.11.0/24`): Dedicated exclusively to ALBs and NAT Gateways.
-  - `Private Application Subnets` (`10.20.1.0/24`, `10.20.2.0/24`): ECS tasks run without public IPs (`assign_public_ip = false`).
-  - `Private Database Subnets` (`10.20.20.0/24`, `10.20.21.0/24`): Isolated relational database tier with 0 internet routes.
-- **Three Core Microservices**:
-  1. `services/listings-api`: Public real estate catalog query service.
-  2. `services/broker-kyc-api`: Authenticated broker upload presign service with JWT validation.
-  3. `services/document-scan-worker`: Asynchronous malware scanner detecting EICAR patterns, validating magic bytes, tagging S3 objects, and publishing alerts to SNS.
-- **Defense-in-Depth Container Hardening**:
-  - **Non-Root Execution**: Runs under dedicated unprivileged user `appuser` (UID `10001`, GID `10001`).
-  - **Read-Only Root Filesystem**: Enforced via ECS task definitions (`readonly_root_filesystem = true`) and minimal Debian slim base images.
-  - **Container Health Probes**: Native container health checks polling `/healthz` every 30 seconds.
-- **ECR Supply Chain Governance**:
-  - Image tag immutability (`IMMUTABLE`) preventing tag spoofing.
-  - Automated vulnerability scanning on push (`scan_on_push = true`).
-  - KMS Customer Managed Key envelope encryption.
-  - Automated lifecycle policies expiring untagged artifacts after 7 days.
-- **Least-Privilege Security Group Flow**:
-  - Internet -> ALB: TCP 443 (HTTPS) and TCP 80 (HTTP redirect to HTTPS).
-  - ALB -> ECS: TCP 8000 only; no direct internet access to containers.
-  - ECS -> RDS: TCP 5432 only.
-- **Network Observability**: Centralized VPC Flow Logs captured in CloudWatch Log Groups with 7-day FinOps retention and KMS CMK encryption.
-
-### 6. Detective Controls, Continuous Compliance & Disaster Recovery
-To satisfy enterprise regulatory audits (UAE PDPL, ISO 27001, SOC 2) and assure continuous availability:
-- **Immutable S3 Audit Destination**: Centralized security log repository protected with **S3 Object Lock** in **`COMPLIANCE`** mode (WORM - Write Once, Read Many). Objects cannot be deleted or overwritten by any user, including the root account. Retention transitions from Standard to Glacier at 90 days, expiring at `audit_retention_days` (365 days in production; 7 days in demo profile).
-- **CloudTrail S3 Data Events**: Granular data access logging enabled on the KYC Vault bucket (`kyc-documents/*`) capturing all `GetObject` and `PutObject` operations for forensic auditability and exfiltration detection.
-- **AWS Config Continuous Compliance**: 8 managed compliance rules actively monitoring account resources:
-  1. `s3-bucket-public-read-prohibited`: Verifies S3 buckets prohibit public read.
-  2. `s3-bucket-public-write-prohibited`: Verifies S3 buckets prohibit public write.
-  3. `encrypted-volumes`: Verifies all attached EBS volumes are encrypted at rest.
-  4. `restricted-common-ports`: Verifies security groups block ingress on high-risk ports (SSH 22, RDP 3389).
-  5. `vpc-default-security-group-closed`: Verifies default security groups deny all inbound and outbound traffic.
-  6. `ec2-imdsv2-check`: Enforces IMDSv2 token hop limit and prohibits legacy IMDSv1.
-  7. `rds-instance-public-access-check`: Verifies RDS databases are not publicly accessible.
-  8. `access-keys-rotated`: Flags IAM access keys older than 90 days.
-- **Decoupled Simulation Schemas**: EventBridge simulation rules match discrete `detail-type` identifiers (`"Simulated S3 Public Exposure Attack"`, `"Simulated IAM Credential Compromise"`), ensuring simulation tests invoke only their intended playbooks without cross-talk.
-- **Disaster Recovery & Data Restoration (RTO < 60 min, RPO < 15 min)**:
-  - **S3 Versioning Delete Marker Rollback**: Accidental or malicious object deletions create soft delete markers; operators can recover data with zero data loss (RPO = 0) by removing the top delete marker.
-  - **DynamoDB Point-in-Time Recovery (PITR)**: Continuous transaction log snapshots allow restoring tables to any second in the preceding 35 days.
-  - **RDS Point-in-Time Recovery**: Continuous WAL archiving facilitates point-in-time database restoration, paired with Route 53 internal DNS CNAME updates for zero-reconfiguration cutover.
-  - Fully documented in [`RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md`](docs/runbooks/RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md) and automated in test suite [`test_disaster_recovery.py`](src/tests/test_disaster_recovery.py).
-
-### 7. Relational Data Protection, Host Hardening & Secure Analytics Pipeline
-To demonstrate comprehensive data governance across relational stores, host-level compute, and big-data analytics architectures:
-- **Hardened Amazon RDS PostgreSQL 16**:
-  - **Private Network Isolation**: Hosted across isolated database subnets (`10.20.20.0/24`, `10.20.21.0/24`) with `publicly_accessible = false` and 0 internet routes. Security group restricts ingress on port 5432 strictly to the ECS application tier.
-  - **Cryptographic Enforcement**: Storage encrypted at rest via dedicated KMS CMK (`storage_encrypted = true`), and in transit via custom parameter group setting `rds.force_ssl = "1"`.
-  - **Credential Governance**: Master administrative credentials dynamically generated, stored, and retrieved via AWS Secrets Manager with KMS CMK encryption (`pf-shield/database/credentials/${environment}`), eliminating hardcoded secrets.
-  - **Production High Availability & Auditing**: Configured for Multi-AZ redundancy, 35-day backup retention, Enhanced Monitoring, Performance Insights, and internal Route 53 DNS addressing (`db.pf-shield.internal`).
-- **Hardened EC2 ClickHouse Analytics Node (Demonstration Lab)**:
-  - *Context*: Clearly identified as an isolated security demonstration environment rather than an internal implementation of any commercial entity.
-  - **Zero-Port Bastionless Administration**: Port 22 (SSH) is completely closed with 0 inbound rules from the internet. Administrative management is performed via AWS Systems Manager Session Manager with IAM instance profile `pf-shield-clickhouse-profile`.
-  - **Host-Level Hardening**: Enforces IMDSv2 strictly (`http_tokens = "required"`, `http_put_response_hop_limit = 1`), preventing SSRF credential theft. Root EBS volume is encrypted using KMS CMK. Query ingress on port 8123 is strictly scoped to the private ECS security group.
-  - **Service Discovery**: Resolvable across private subnets via Route 53 A record `analytics.pf-shield.internal`.
-- **AWS Glue ETL Sanitization & S3 Data Lake Pipeline**:
-  - **S3 Analytics Data Lake**: Dedicated bucket (`pf-shield-analytics-${env}-${account_id}`) partitioned into `raw/` and `curated/` prefixes, enforcing S3 Bucket Keys, SSE-KMS CMK encryption, and public access blocks.
-  - **Automated PII Stripping**: AWS Glue ETL job ([`glue_etl_sanitize_listings.py`](src/analytics/glue_etl_sanitize_listings.py)) cleans raw property feeds, dropping sensitive broker and landlord PII (`broker_emirates_id`, `broker_phone`, `broker_email`, `landlord_contact`).
-  - **Cryptographic Broker Pseudonymization**: Derives irreversible salted SHA-256 pseudonyms (`anonymized_broker_hash`), enabling aggregate market analytics without exposing personal data under UAE PDPL.
-  - **Security Configuration**: Encrypts CloudWatch Logs, S3 outputs, and job bookmarks using KMS CMK.
-
-### 8. Edge Security, WAFv2, CloudFront & AWS Shield Defense Model
-To defend the platform against Layer 3, Layer 4, and Layer 7 cyber attacks, credential stuffing, scraping, and volumetric distributed denial of service:
-- **Global Edge Acceleration via Amazon CloudFront**:
-  - Fronts the Application Load Balancer with HTTP/3 support and regional edge caching for static assets.
-  - **Custom Origin Header Verification**: Generates a high-entropy secret (`X-Origin-Verify`) passed from CloudFront to the ALB, ensuring requests cannot bypass edge protections by calling the ALB DNS name directly.
-  - **Response Security Headers**: Injects defense-in-depth HTTP headers on all edge responses:
-    - `Strict-Transport-Security` (HSTS: `max-age=63072000; includeSubDomains; preload`).
-    - `X-Frame-Options: DENY` (clickjacking mitigation).
-    - `X-Content-Type-Options: nosniff` (MIME confusion prevention).
-    - `Referrer-Policy: strict-origin-when-cross-origin`.
-  - **Geo-Restriction**: Whitelists authorized access to designated jurisdictions (`AE`, `SA`, `BH`, `KW`, `OM`, `QA`, `US`, `GB`), satisfying UAE/GCC compliance requirements.
-- **Multi-Layer AWS WAFv2 WebACL Inspection**:
-  - Associated with both the Edge HTTP API Gateway and the public Application Load Balancer with 6 prioritized rules:
-    1. `RateLimitScrapers` (Priority 10): Blocks IP addresses exceeding 100 requests per 5 minutes.
-    2. `BrokerUploadRateLimit` (Priority 15): Scoped specifically to broker upload paths (`/kyc`), blocking IPs exceeding 50 requests per 5 minutes to prevent automated file flooding and credential abuse.
-    3. `AWSManagedRulesCommonRuleSet` (Priority 20): OWASP Top 10 core web vulnerabilities.
-    4. `AWSManagedRulesSQLiRuleSet` (Priority 30): SQL injection patterns.
-    5. `AWSManagedRulesKnownBadInputsRuleSet` (Priority 40): Known bad inputs and Log4j (CVE-2021-44228) exploit attempts.
-    6. `AWSManagedRulesAmazonIpReputationList` (Priority 50): Threat intelligence-backed blocking of active botnets, Tor nodes, and scanners.
-- **AWS Shield Defense Model: Standard vs. Advanced Justification**:
-  - **AWS Shield Standard ($0.00 / month)**: Automatically active across all public AWS endpoints (ALB, CloudFront, Route 53, API Gateway). Provides comprehensive Layer 3/4 protection against SYN/UDP floods, reflection attacks, and volumetric exhaustion without incurring monthly subscription fees.
-  - **AWS Shield Advanced Enterprise Decision Criteria ($3,000 / month + 1-year commit)**:
-    - *Economic & SLA Justification*: Justified only when production downtime cost exceeds ~$36,000/year or when the platform experiences continuous sophisticated Layer 7 attacks requiring 24/7 AWS Shield Response Team (SRT) manual intervention.
-    - *Financial Cost Protection*: Shield Advanced reimburses scaling costs resulting from spike traffic during legitimate DDoS attacks (e.g., auto-scaling ECS task and bandwidth surcharges).
-    - *Cross-Account Central Orchestration*: Integrates with AWS Firewall Manager to enforce security policies across enterprise AWS Organizations.
-- **Proactive CloudWatch Edge Security Alarms**:
-  - `pf-waf-blocked-requests-high`: Triggers when WAF blocks > 50 requests in 5 minutes.
-  - `pf-waf-ratelimit-scrapers`: Triggers when scraper rate limiting is actively engaged (> 20 blocks in 5 minutes).
-  - `pf-alb-target-5xx-high`: Alerts when target containers return > 10 HTTP 5xx responses in 5 minutes.
-  - `pf-alb-target-4xx-probing`: Alerts when 4xx client errors spike (> 100 in 5 minutes), detecting automated fuzzers and reconnaissance.
-
-### 9. Software Supply Chain & DevSecOps CI/CD Governance
-To guarantee that no untrusted, unverified, or vulnerable code reaches production:
-- **100% Immutable Commit SHA Pinning**: Every GitHub Action in all workflows is pinned to an immutable 40-character hexadecimal commit SHA (e.g., `actions/checkout@11bd7190... # v4.2.2`). This eliminates mutable tag spoofing risks and third-party action poisoning attacks.
-- **Strict OIDC Trust Policy Scoping**: The AWS IAM assume-role policy for GitHub Actions ([`terraform-bootstrap/main.tf`](terraform-bootstrap/main.tf)) restricts the subject claim strictly to:
-  - Protected primary branch: `repo:owner/repo:ref:refs/heads/main`
-  - Protected environment: `repo:owner/repo:environment:production`
-  - Pull requests originating within the repository: `repo:owner/repo:pull_request`
-  Unbounded wildcards (`repo:owner/repo:*`) are strictly prohibited.
-- **Automated Multi-Stage DevSecOps Pipeline**:
-  1. **Secret Detection**: Gitleaks scans commit history for leaked API keys, tokens, or private certificates.
-  2. **Unit & Mock Testing**: Executes 44 automated tests with Moto AWS mocks.
-  3. **Static Application Security Testing (SAST)**: Semgrep scans application handlers and services for OWASP Top 10 vulnerabilities, outputting SARIF reports.
-  4. **Policy-as-Code & IaC Scanning**: Checkov scans all Terraform configs and uploads SARIF findings directly to GitHub Security.
-  5. **Container Vulnerability & SBOM Governance**: Trivy scans Dockerfiles, CycloneDX generates Software Bills of Materials (`services-sbom.json`), and Cosign verifies cryptographic container attestation capabilities.
-  6. **Kubernetes Shift-Left Verification**: Kyverno CLI validates deployments against admission policies before cluster deployment.
-  7. **Protected Production Approval Gate**: Production deployments require explicit environment review and short-lived OIDC session credentials (`max_session_duration = 3600`).
-- **Continuous Dependency Monitoring**: [`.github/dependabot.yml`](.github/dependabot.yml) monitors GitHub Actions, Python packages, Terraform providers, and container base images with automated weekly security pull requests.
-
----
-
-## 7. Step-by-Step Deployment Runbook
+## Step-by-Step Deployment Runbook
 
 ### Prerequisites
 - AWS CLI `>= 2.15.0` configured with administrative credentials in region `me-central-1`.
@@ -423,7 +311,7 @@ Then add the output `github_actions_role_arn` to GitHub repository secrets:
 git clone https://github.com/YousefOsama/pf-shield-cloud-security.git
 cd pf-shield-cloud-security
 
-# 2. Run unit tests (Moto AWS mocking)
+# 2. Run unit & integration tests (Moto AWS mocking)
 make test
 
 # 3. Run Checkov policy-as-code security scan across main and bootstrap IaC
@@ -469,7 +357,7 @@ PF-Shield provides three automated GitHub Actions workflows:
 
 1. **DevSecOps Pipeline ([`devsecops-pipeline.yml`](.github/workflows/devsecops-pipeline.yml))**:
    - Triggers on push to `main`.
-   - Executes SOAR unit test suites (`pytest` + `moto`), full IaC static analysis (`Checkov`), and shift-left Kubernetes policies (`Kyverno CLI`).
+   - Executes SOAR unit test suites (`pytest` + `moto`), full IaC static analysis (`Checkov`), container vulnerability scanning (`Trivy`), SBOM generation (`CycloneDX`), container image attestation (`Cosign`), and shift-left Kubernetes policies (`Kyverno CLI`).
 2. **PR Security Gate ([`pr-checkov.yml`](.github/workflows/pr-checkov.yml))**:
    - Triggers on pull requests affecting `terraform/**` or `terraform-bootstrap/**`.
    - Runs `terraform fmt -check`, `terraform validate`, and scans for security regressions with `Checkov`, blocking non-compliant PRs before merge.
@@ -479,41 +367,47 @@ PF-Shield provides three automated GitHub Actions workflows:
 
 ---
 
-## 8. Production Incident Post-Mortems
+## Production Incident Post-Mortems
 
-Technical challenges encountered during implementation are documented below and in [docs/EVIDENCE.md](docs/EVIDENCE.md#7-comprehensive-incident-post-mortem-log):
+Key architectural challenges encountered and solved during engineering are documented below and in [`docs/EVIDENCE.md`](docs/EVIDENCE.md#7-comprehensive-incident-post-mortem-log):
 
 ### Incident 1: S3 Bucket Lifecycle Configuration Rule Filter Deprecation
 - **Symptoms**: `Warning: Invalid Attribute Combination: No attribute specified when one of [filter, prefix] is required`.
 - **RCA**: AWS Provider `~> 5.0` requires explicit `filter {}` blocks on lifecycle rules to prevent deprecated whole-bucket matching.
 - **Resolution**: Injected explicit `filter {}` blocks into all S3 lifecycle resources.
-- **Terminal Evidence**: [docs/screenshots/incident-01-terminal-failure.png](docs/screenshots/incident-01-terminal-failure.png).
+- **Evidence**: [docs/screenshots/incident-01-terminal-failure.png](docs/screenshots/incident-01-terminal-failure.png).
 
 ### Incident 2: Checkov CKV_AWS_286 Privilege Escalation Flag on SOAR IAM Role Policy
 - **Symptoms**: Checkov failed on `iam:AttachRolePolicy` and `iam:AttachUserPolicy` inside SOAR remediation role.
 - **RCA**: Attaching policies dynamically is an escalation risk for standard roles, but is **the fundamental operational requirement** of SOAR quarantine automation.
-- **Resolution**: Documented intentional architectural tradeoff via `#checkov:skip=CKV_AWS_286` inside the resource block with permission boundary scoping.
-- **Terminal Evidence**: [docs/screenshots/incident-02-terminal-failure.png](docs/screenshots/incident-02-terminal-failure.png).
+- **Resolution**: Scoped actions to dedicated SOAR permissions boundary and documented intentional architectural tradeoff via `#checkov:skip=CKV_AWS_286`.
+- **Evidence**: [docs/screenshots/incident-02-terminal-failure.png](docs/screenshots/incident-02-terminal-failure.png).
+
+### Incident 3: Cyclic Dependency in Cross-Module S3 Notification & KMS Key Policy
+- **Symptoms**: Terraform execution plan generated a cyclic DAG dependency between KMS CMK key policy and S3 audit bucket event notifications.
+- **RCA**: S3 bucket policy referenced KMS CMK ARN while KMS CMK key policy referenced S3 bucket ARN before resource creation.
+- **Resolution**: Refactored KMS key policy to use AWS account-scoped condition matching (`aws:SourceArn`) with wildcards, breaking the circular dependency graph cleanly.
+- **Evidence**: Documented in [`docs/EVIDENCE.md`](docs/EVIDENCE.md#incident-post-mortem-3-cyclic-dag-dependency-in-cross-module-s3-notification--kms-key-policy).
 
 ---
 
-## 9. Cost Notes & Teardown Protocol
+## Cost Notes & Teardown Protocol
 
 ### FinOps Summary
 - **Baseline Idle Run Rate**: **$0.00 – $1.10 / month** (1x KMS CMK = $1.00/mo; all compute, networking, and databases operate on scale-to-zero free tiers).
-- **Full Security Stack Enabled (WAF + GuardDuty + Security Hub)**: **~$12.00 – $18.00 / month**.
-- **Naive Enterprise Equivalent**: **~$235.00 – $260.00 / month** (99.5% cost reduction achieved).
+- **Full Security Stack Active (WAF + GuardDuty + Security Hub + Multi-AZ RDS)**: **~$18.00 – $45.00 / month**.
+- **Naive Enterprise Equivalent**: **~$450.00 – $480.00 / month** (>90% cost reduction achieved).
 
 ### Ordered Teardown Command
 To safely decommission all provisioned resources without leaving orphaned cloud assets:
 ```bash
 make destroy
 ```
-*(Deletes API Gateway stages, Lambda functions, KMS aliases, SQS DLQs, EventBridge rules, VPC Gateway Endpoints, and empties the S3 buckets via `force_destroy = true`)*.
+*(Deletes API Gateway stages, Lambda functions, KMS aliases, SQS DLQs, EventBridge rules, VPC Gateway Endpoints, and empties the S3 buckets via `force_destroy = true` in demo mode)*.
 
 ---
 
-## 10. Author & License
+## Author & License
 
 - **Author**: Yousef Osama
 - **License**: MIT License
