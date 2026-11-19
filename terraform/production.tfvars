@@ -40,8 +40,8 @@ protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,p
 
 # Public Domain & Retention Settings (Production Baseline)
 public_domain_name      = "pf-shield.ae"
-route53_zone_id         = "Z0123456789EXAMPLE"
-container_image_tag     = "latest"
+route53_zone_id         = "Z08392173R82K9L0P2Q1"
+container_image_tag     = "pf-shield@sha256:ba837841108226011a68ba9b0a6245084988f01b3d7b4202a4d339185a73e670"
 log_retention_days      = 365
 enable_waf_logging      = true
 enable_alb_cognito_auth = true

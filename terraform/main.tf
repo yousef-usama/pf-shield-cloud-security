@@ -37,12 +37,6 @@ module "zero_trust_kyc_vault" {
   aws_region             = var.aws_region
   environment            = var.environment
   s3_gateway_endpoint_id = module.network.s3_gateway_endpoint_id
-
-  # Pre-allow roles that require S3 access through the data perimeter
-  allowed_principal_arns = [
-    module.soar_engine.s3_lockdown_role_arn,
-    module.edge_api_waf.kyc_vault_role_arn
-  ]
 }
 
 # 5. Automated Cloud Incident Response & SOAR Engine
@@ -103,6 +97,11 @@ module "edge_api_waf" {
 # 9. Container Workload Platform & Microservices (Amazon ECS on Fargate)
 module "container_platform" {
   source = "./modules/container-platform"
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 
   aws_region                            = var.aws_region
   environment                           = var.environment
@@ -200,5 +199,23 @@ module "analytics_lab" {
   enable_analytics_lab            = var.enable_analytics_lab
   analytics_instance_type         = var.analytics_instance_type
   enable_glue_etl                 = var.enable_glue_etl
+}
+
+# 14. Zero-Trust S3 Data Perimeter Policy (Leaf Module Wiring All Service Task Roles)
+module "s3_data_perimeter" {
+  source = "./modules/s3-data-perimeter"
+
+  aws_region             = var.aws_region
+  environment            = var.environment
+  bucket_id              = module.zero_trust_kyc_vault.kyc_vault_bucket_id
+  bucket_arn             = module.zero_trust_kyc_vault.kyc_vault_bucket_arn
+  s3_gateway_endpoint_id = module.network.s3_gateway_endpoint_id
+
+  allowed_principal_arns = [
+    module.soar_engine.s3_lockdown_role_arn,
+    module.edge_api_waf.kyc_vault_role_arn,
+    module.container_platform.broker_kyc_task_role_arn,
+    module.container_platform.scan_worker_task_role_arn
+  ]
 }
 

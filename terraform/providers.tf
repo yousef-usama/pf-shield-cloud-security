@@ -27,6 +27,23 @@ provider "aws" {
   }
 }
 
+# Dedicated US-East-1 AWS Provider for CloudFront Edge ACM Certificates
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project            = "PF-Shield"
+      Environment        = var.environment
+      ManagedBy          = "Terraform"
+      CostCenter         = "PF-Cloud-Security"
+      DataClassification = "Restricted-UAE-PDPL"
+      Owner              = var.owner
+    }
+  }
+}
+
 locals {
   # Documentation of verified regional service availability between UAE (me-central-1) and Bahrain (me-south-1).
   # Used to document architectural trade-offs and provide regional verification rationale.

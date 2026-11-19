@@ -506,6 +506,81 @@ resource "aws_acm_certificate_validation" "alb" {
   validation_record_fqdns = [for record in aws_route53_record.alb_cert_validation : record.fqdn]
 }
 
+# Dedicated CloudFront Edge Certificate in us-east-1 (Required for CloudFront Custom Domain)
+resource "aws_acm_certificate" "cloudfront" {
+  provider          = aws.us_east_1
+  count             = var.enable_cloudfront && var.public_domain_name != "" ? 1 : 0
+  domain_name       = "api.${var.public_domain_name}"
+  validation_method = "DNS"
+
+  subject_alternative_names = [
+    "listings.${var.public_domain_name}",
+    "kyc.${var.public_domain_name}"
+  ]
+
+  tags = {
+    Name        = "pf-shield-cloudfront-cert-${var.environment}"
+    Environment = var.environment
+    Compliance  = "UAE-PDPL-TLS13"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Route 53 DNS Validation Records for CloudFront us-east-1 ACM Certificate
+resource "aws_route53_record" "cloudfront_cert_validation" {
+  for_each = (var.enable_cloudfront && var.route53_zone_id != "" && length(aws_acm_certificate.cloudfront) > 0) ? {
+    for dvo in aws_acm_certificate.cloudfront[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = var.route53_zone_id
+}
+
+resource "aws_acm_certificate_validation" "cloudfront" {
+  provider                = aws.us_east_1
+  count                   = var.enable_cloudfront && var.public_domain_name != "" && var.route53_zone_id != "" ? 1 : 0
+  certificate_arn         = aws_acm_certificate.cloudfront[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.cloudfront_cert_validation : record.fqdn]
+}
+
+# Route 53 Public Alias Records (Routing api.<domain> to CloudFront or ALB)
+resource "aws_route53_record" "api_alias" {
+  count   = var.route53_zone_id != "" && var.public_domain_name != "" ? 1 : 0
+  zone_id = var.route53_zone_id
+  name    = "api.${var.public_domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].domain_name : aws_lb.main.dns_name
+    zone_id                = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].hosted_zone_id : aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_route53_record" "api_alias_ipv6" {
+  count   = var.route53_zone_id != "" && var.public_domain_name != "" ? 1 : 0
+  zone_id = var.route53_zone_id
+  name    = "api.${var.public_domain_name}"
+  type    = "AAAA"
+
+  alias {
+    name                   = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].domain_name : aws_lb.main.dns_name
+    zone_id                = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].hosted_zone_id : aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
+}
+
 # ALB HTTP Listener (Port 80) -> Strictly redirects to HTTPS 443 (CIS AWS Benchmark)
 resource "aws_lb_listener" "http_redirect" {
   load_balancer_arn = aws_lb.main.arn
@@ -701,6 +776,10 @@ resource "aws_cloudfront_distribution" "alb" {
     response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers[0].id
   }
 
+  aliases = var.enable_cloudfront && var.public_domain_name != "" ? [
+    "api.${var.public_domain_name}"
+  ] : []
+
   restrictions {
     geo_restriction {
       restriction_type = "whitelist"
@@ -709,7 +788,10 @@ resource "aws_cloudfront_distribution" "alb" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    acm_certificate_arn            = length(aws_acm_certificate.cloudfront) > 0 ? aws_acm_certificate.cloudfront[0].arn : null
+    cloudfront_default_certificate = length(aws_acm_certificate.cloudfront) > 0 ? false : true
+    ssl_support_method             = length(aws_acm_certificate.cloudfront) > 0 ? "sni-only" : null
+    minimum_protocol_version       = length(aws_acm_certificate.cloudfront) > 0 ? "TLSv1.2_2021" : "TLSv1"
   }
 
   tags = {
@@ -721,6 +803,27 @@ resource "aws_cloudfront_distribution" "alb" {
 # ---------------------------------------------------------------------------------------------------------------------
 # 6. ECS TASK DEFINITIONS (FARGATE, READ-ONLY ROOT FS, NON-ROOT UID 10001)
 # ---------------------------------------------------------------------------------------------------------------------
+
+locals {
+  # Construct immutable image references (supporting repository@sha256:..., sha256:..., or immutable tags)
+  listings_api_image = strcontains(var.container_image_tag, "@sha256:") ? (
+    strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${aws_ecr_repository.listings_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+    ) : (
+    strcontains(var.container_image_tag, "sha256:") ? "${aws_ecr_repository.listings_api.repository_url}@${var.container_image_tag}" : "${aws_ecr_repository.listings_api.repository_url}:${var.container_image_tag}"
+  )
+
+  broker_kyc_api_image = strcontains(var.container_image_tag, "@sha256:") ? (
+    strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${aws_ecr_repository.broker_kyc_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+    ) : (
+    strcontains(var.container_image_tag, "sha256:") ? "${aws_ecr_repository.broker_kyc_api.repository_url}@${var.container_image_tag}" : "${aws_ecr_repository.broker_kyc_api.repository_url}:${var.container_image_tag}"
+  )
+
+  document_scan_worker_image = strcontains(var.container_image_tag, "@sha256:") ? (
+    strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${aws_ecr_repository.document_scan_worker.repository_url}@${split("@", var.container_image_tag)[1]}"
+    ) : (
+    strcontains(var.container_image_tag, "sha256:") ? "${aws_ecr_repository.document_scan_worker.repository_url}@${var.container_image_tag}" : "${aws_ecr_repository.document_scan_worker.repository_url}:${var.container_image_tag}"
+  )
+}
 
 resource "aws_ecs_task_definition" "listings_api" {
   family                   = "pf-shield-listings-api-${var.environment}"
@@ -734,7 +837,7 @@ resource "aws_ecs_task_definition" "listings_api" {
   container_definitions = jsonencode([
     {
       name                   = "listings-api"
-      image                  = "${aws_ecr_repository.listings_api.repository_url}:${var.container_image_tag}"
+      image                  = local.listings_api_image
       essential              = true
       readonlyRootFilesystem = true
       user                   = "10001:10001"
@@ -765,6 +868,13 @@ resource "aws_ecs_task_definition" "listings_api" {
     }
   ])
 
+  lifecycle {
+    precondition {
+      condition     = var.environment != "production" || (var.container_image_tag != "latest" && can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", var.container_image_tag)))
+      error_message = "Production deployment requires an immutable container image digest (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
+    }
+  }
+
   tags = {
     Name = "pf-shield-td-listings-api-${var.environment}"
   }
@@ -782,7 +892,7 @@ resource "aws_ecs_task_definition" "broker_kyc_api" {
   container_definitions = jsonencode([
     {
       name                   = "broker-kyc-api"
-      image                  = "${aws_ecr_repository.broker_kyc_api.repository_url}:${var.container_image_tag}"
+      image                  = local.broker_kyc_api_image
       essential              = true
       readonlyRootFilesystem = true
       user                   = "10001:10001"
@@ -815,6 +925,13 @@ resource "aws_ecs_task_definition" "broker_kyc_api" {
     }
   ])
 
+  lifecycle {
+    precondition {
+      condition     = var.environment != "production" || (var.container_image_tag != "latest" && can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", var.container_image_tag)))
+      error_message = "Production deployment requires an immutable container image digest (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
+    }
+  }
+
   tags = {
     Name = "pf-shield-td-broker-kyc-api-${var.environment}"
   }
@@ -832,7 +949,7 @@ resource "aws_ecs_task_definition" "document_scan_worker" {
   container_definitions = jsonencode([
     {
       name                   = "document-scan-worker"
-      image                  = "${aws_ecr_repository.document_scan_worker.repository_url}:${var.container_image_tag}"
+      image                  = local.document_scan_worker_image
       essential              = true
       readonlyRootFilesystem = true
       user                   = "10001:10001"
@@ -865,6 +982,13 @@ resource "aws_ecs_task_definition" "document_scan_worker" {
       }
     }
   ])
+
+  lifecycle {
+    precondition {
+      condition     = var.environment != "production" || (var.container_image_tag != "latest" && can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", var.container_image_tag)))
+      error_message = "Production deployment requires an immutable container image digest (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
+    }
+  }
 
   tags = {
     Name = "pf-shield-td-document-scan-worker-${var.environment}"

@@ -63,3 +63,23 @@ output "cloudfront_domain_name" {
   value       = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].domain_name : null
 }
 
+output "broker_kyc_task_role_arn" {
+  description = "The ARN of the broker KYC API ECS task role"
+  value       = aws_iam_role.broker_kyc_api_task_role.arn
+}
+
+output "scan_worker_task_role_arn" {
+  description = "The ARN of the document scan worker ECS task role"
+  value       = aws_iam_role.document_scan_worker_task_role.arn
+}
+
+output "listings_api_task_role_arn" {
+  description = "The ARN of the listings API ECS task role"
+  value       = aws_iam_role.listings_api_task_role.arn
+}
+
+output "ecs_execution_role_arn" {
+  description = "The ARN of the ECS task execution role"
+  value       = aws_iam_role.ecs_execution_role.arn
+}
+

@@ -143,9 +143,14 @@ variable "route53_zone_id" {
 }
 
 variable "container_image_tag" {
-  description = "Immutable container image tag (Git commit SHA) for ECS task definitions"
+  description = "Immutable container image tag or digest (e.g. repository@sha256:... or sha256:...). Must not be 'latest'."
   type        = string
-  default     = "latest"
+  default     = "0000000000000000000000000000000000000000"
+
+  validation {
+    condition     = var.container_image_tag != "latest" && !can(regex("(?i)^latest$", var.container_image_tag))
+    error_message = "The container image reference must not be 'latest'. In production, an immutable digest (e.g., repository@sha256:<64-hex>) is required."
+  }
 }
 
 variable "log_retention_days" {

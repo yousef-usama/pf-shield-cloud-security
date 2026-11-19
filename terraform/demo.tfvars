@@ -41,7 +41,7 @@ protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,p
 # Public Domain & Retention Settings (Demo Profile)
 public_domain_name      = "pf-shield.demo"
 route53_zone_id         = ""
-container_image_tag     = "latest"
+container_image_tag     = "v1.0.0-demo"
 log_retention_days      = 7
 enable_waf_logging      = false
 enable_alb_cognito_auth = false

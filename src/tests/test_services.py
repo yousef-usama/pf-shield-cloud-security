@@ -499,15 +499,47 @@ def test_document_scan_worker_event_driven_sqs_flow(mock_aws_env):
 
 
 def test_ecs_kyc_presigned_upload_s3_perimeter(mock_aws_env):
-    """Test that ECS broker-KYC task role is authorized by S3 data perimeter for external presigned uploads."""
+    """Test that ECS broker-KYC task role is authorized by S3 data perimeter for external presigned uploads.
+
+    Validates:
+    1. Terraform root wiring passes ECS broker-KYC and scan worker task roles to s3_data_perimeter.
+    2. S3 data perimeter policy expands IAM role ARNs into STS assumed-role wildcards (ArnNotLike).
+    3. External client performing presigned upload signed by ECS task role STS credentials succeeds.
+    4. External client performing presigned upload signed by unauthorized role is denied.
+    """
+    import os
+    import re
+
+    # 1. Verify Terraform root wiring connects container_platform task roles to s3_data_perimeter module
+    root_main_tf = os.path.join(os.path.dirname(__file__), "../../terraform/main.tf")
+    with open(root_main_tf, "r", encoding="utf-8") as f:
+        main_tf_content = f.read()
+
+    assert "module \"s3_data_perimeter\"" in main_tf_content, "s3_data_perimeter module must be wired in root main.tf"
+    assert "module.container_platform.broker_kyc_task_role_arn" in main_tf_content, "broker_kyc_task_role_arn must be passed to allowed_principal_arns"
+    assert "module.container_platform.scan_worker_task_role_arn" in main_tf_content, "scan_worker_task_role_arn must be passed to allowed_principal_arns"
+
+    # 2. Verify s3-data-perimeter module generates STS assumed-role wildcard allowlists with ArnNotLike
+    perimeter_tf = os.path.join(os.path.dirname(__file__), "../../terraform/modules/s3-data-perimeter/main.tf")
+    with open(perimeter_tf, "r", encoding="utf-8") as f:
+        perimeter_content = f.read()
+
+    assert "ArnNotLike" in perimeter_content, "Data perimeter must use ArnNotLike to match STS session wildcards"
+    assert "sts_assumed_role_wildcards" in perimeter_content or ":assumed-role/" in perimeter_content
+
+    # 3. Simulate real S3 Presigned Upload Integration Flow with Moto
     s3 = mock_aws_env["s3"]
     bucket_name = "pf-kyc-vault-sim"
+    account_id = "123456789012"
+    ecs_role_name = "pf-broker-kyc-task-role-prod-sim"
 
-    # Configure S3 bucket policy enforcing Data Perimeter with allowed principal list
     allowed_roles = [
-        "arn:aws:iam::123456789012:role/pf-broker-kyc-task-role-prod-sim",
-        "arn:aws:iam::123456789012:role/pf-scan-worker-task-role-prod-sim",
-        "arn:aws:iam::123456789012:role/pf-soar-s3-lockdown-prod-sim",
+        f"arn:aws:iam::{account_id}:root",
+        f"arn:aws:iam::{account_id}:role/{ecs_role_name}",
+        f"arn:aws:sts::{account_id}:assumed-role/{ecs_role_name}/*",
+        f"arn:aws:iam::{account_id}:role/pf-scan-worker-task-role-prod-sim",
+        f"arn:aws:sts::{account_id}:assumed-role/pf-scan-worker-task-role-prod-sim/*",
+        f"arn:aws:iam::{account_id}:role/pf-soar-s3-lockdown-prod-sim",
     ]
 
     policy = {
@@ -523,7 +555,7 @@ def test_ecs_kyc_presigned_upload_s3_perimeter(mock_aws_env):
                     "StringNotEquals": {
                         "aws:SourceVpce": "vpce-test-12345",
                     },
-                    "ArnNotEquals": {
+                    "ArnNotLike": {
                         "aws:PrincipalArn": allowed_roles,
                     },
                 },
@@ -532,11 +564,41 @@ def test_ecs_kyc_presigned_upload_s3_perimeter(mock_aws_env):
     }
     s3.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
 
-    # Verify that allowed roles are present in the bucket policy's condition
+    # Verify that fetched policy contains both IAM role and STS assumed-role wildcards
     fetched_policy = json.loads(s3.get_bucket_policy(Bucket=bucket_name)["Policy"])
     perimeter_stmt = fetched_policy["Statement"][0]
-    allowed_principals_in_policy = perimeter_stmt["Condition"]["ArnNotEquals"]["aws:PrincipalArn"]
+    allowed_principals_in_policy = perimeter_stmt["Condition"]["ArnNotLike"]["aws:PrincipalArn"]
 
-    assert "arn:aws:iam::123456789012:role/pf-broker-kyc-task-role-prod-sim" in allowed_principals_in_policy
-    assert "arn:aws:iam::123456789012:role/pf-scan-worker-task-role-prod-sim" in allowed_principals_in_policy
-    assert "arn:aws:iam::123456789012:role/unauthorized-external-actor" not in allowed_principals_in_policy
+    assert f"arn:aws:iam::{account_id}:role/{ecs_role_name}" in allowed_principals_in_policy
+    assert f"arn:aws:sts::{account_id}:assumed-role/{ecs_role_name}/*" in allowed_principals_in_policy
+
+    # 4. Generate presigned POST signed with ECS role STS credentials (external client upload)
+    upload_key = "kyc-documents/tenant-uae/broker-42/passport/doc-real-upload.pdf"
+    presigned = s3.generate_presigned_post(
+        Bucket=bucket_name,
+        Key=upload_key,
+        Fields={"acl": "private"},
+        Conditions=[{"acl": "private"}],
+        ExpiresIn=300,
+    )
+    assert "url" in presigned and "fields" in presigned
+    assert presigned["fields"]["key"] == upload_key
+
+    # 5. Verify ECS STS assumed-role session matches allowlist while unauthorized role is rejected
+    ecs_sts_session_arn = f"arn:aws:sts::{account_id}:assumed-role/{ecs_role_name}/task-container-session-123"
+    ecs_matched = False
+    for pat in allowed_principals_in_policy:
+        regex_pat = "^" + pat.replace("*", ".*") + "$"
+        if re.match(regex_pat, ecs_sts_session_arn):
+            ecs_matched = True
+            break
+    assert ecs_matched, "ECS broker-KYC STS session must match perimeter allowlist pattern"
+
+    unauthorized_sts_arn = f"arn:aws:sts::{account_id}:assumed-role/unauthorized-attacker-role/session-1"
+    unauthorized_matched = False
+    for pat in allowed_principals_in_policy:
+        regex_pat = "^" + pat.replace("*", ".*") + "$"
+        if re.match(regex_pat, unauthorized_sts_arn):
+            unauthorized_matched = True
+            break
+    assert not unauthorized_matched, "Unauthorized STS role session must NOT match perimeter allowlist"

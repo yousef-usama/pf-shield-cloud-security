@@ -18,6 +18,11 @@ output "kyc_vault_bucket_name" {
   value       = aws_s3_bucket.kyc_vault.id
 }
 
+output "kyc_vault_bucket_id" {
+  description = "The ID/name of the S3 KYC Vault bucket"
+  value       = aws_s3_bucket.kyc_vault.id
+}
+
 output "kyc_vault_bucket_arn" {
   description = "The ARN of the S3 KYC Vault bucket"
   value       = aws_s3_bucket.kyc_vault.arn

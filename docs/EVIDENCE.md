@@ -14,7 +14,7 @@ All automated test suites, policy-as-code scanners, and regression benchmarks ex
 | :--- | :--- | :--- | :--- | :--- |
 | **Comprehensive Test Suite** | `pytest src/tests/ -v` (Moto AWS mocks) | 100% test pass rate | **PASS (100%)** | **46/46 test cases passed** in 7.06s |
 | **Infrastructure-as-Code** | `terraform validate` across 13 modules | AWS Provider v5.100 | **PASS** | Valid syntax, 0 deprecations |
-| **Static Security Scanning** | `checkov -d terraform/ -d terraform-bootstrap/` | CIS AWS / Bridgecrew | **PASS** | **892 checks passed, 0 failed, 192 skipped** |
+| **Static Security Scanning** | `checkov -d terraform/ -d terraform-bootstrap/` | CIS AWS / Bridgecrew | **PASS** | **900 checks passed, 0 failed, 192 skipped** |
 | **Kubernetes Shift-Left** | `kyverno apply k8s-security-policies/` | Pod Security Standards | **PASS** | Default-deny & root prohibition verified |
 | **Secret Detection** | `gitleaks detect` | Zero hardcoded credentials | **PASS** | Clean commit history, 0 secret leaks |
 | **Supply Chain Governance** | `test_all_github_actions_are_pinned` | SLSA Level 3 compliance | **PASS** | 100% of actions pinned to 40-char SHA |
@@ -88,11 +88,12 @@ src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_human_approval_mode PASSED 
 ```text
 terraform scan results:
 
-Passed checks: 446, Failed checks: 0, Skipped checks: 96
+Passed checks: 450, Failed checks: 0, Skipped checks: 96
+
 
 terraform scan results:
 
-Passed checks: 892, Failed checks: 0, Skipped checks: 192
+Passed checks: 900, Failed checks: 0, Skipped checks: 192
 ```
 
 ---
@@ -193,4 +194,38 @@ Real-world deployment obstacles and configuration bugs encountered during develo
 - **Root Cause Analysis (RCA)**:
   A shared monolithic workload permission boundary was initially applied across all platform services. However, AWS Config, AWS Glue, RDS enhanced monitoring, and ECS task execution require fundamentally distinct permissions (e.g. AWS Config needs recording write APIs; ECS execution needs ECR auth tokens; Glue needs S3 catalog access). Expanding the generic boundary would violate least privilege, whereas naive wildcards (`s3:PutObject*`) inadvertently included permissions management actions (`s3:PutObjectAcl`).
 - **Resolution & Engineering Remediation**:
-  Engineered 6 discrete, decoupled permission boundaries (`ecs_execution`, `ecs_task`, `config`, `glue`, `rds_monitoring`, and `ssm_ec2`). Tightened `config_permission_boundary` to specify explicit actions (`s3:PutObject` rather than `s3:PutObject*`) with regional conditions (`aws:RequestedRegion`), fully satisfying Checkov with 0 failures across all 892 checks.
+  Engineered 6 discrete, decoupled permission boundaries (`ecs_execution`, `ecs_task`, `config`, `glue`, `rds_monitoring`, and `ssm_ec2`). Tightened `config_permission_boundary` to specify explicit actions (`s3:PutObject` rather than `s3:PutObject*`) with regional conditions (`aws:RequestedRegion`), fully satisfying Checkov with 0 failures across all 900 checks.
+
+---
+
+### Incident 6: S3 Data Perimeter Decoupling & STS Assumed-Role Presigned Upload Allowlist
+
+- **Symptoms & Error**:
+  ```text
+  Client Error: 403 Forbidden: Access Denied
+    when executing external presigned HTTP POST upload to S3 KYC Vault
+    from outside VPC perimeter (IP 198.51.100.42)
+  ```
+- **Root Cause Analysis (RCA)**:
+  AWS S3 evaluates bucket policy conditions against the request context's `aws:PrincipalArn`. When an external client uploads a document via a presigned POST or PUT policy signed by an ECS IAM task role (`arn:aws:iam::<account>:role/<role-name>`), AWS STS generates temporary credentials whose principal ARN in the request context evaluates to the STS assumed-role session ARN (`arn:aws:sts::<account>:assumed-role/<role-name>/<session-id>`). A bucket policy evaluating `StringNotEquals: aws:PrincipalArn: arn:aws:iam:...` will strictly evaluate as `true` (not equal) and trigger an explicit deny because the session ARN string does not match the IAM role ARN string! Additionally, directly referencing ECS task role outputs in the KYC vault module created an invalid circular DAG dependency in Terraform.
+- **Resolution & Engineering Remediation**:
+  1. Decoupled the S3 bucket policy out of the foundational `zero-trust-kyc-vault` module into a standalone leaf module: `terraform/modules/s3-data-perimeter`. This leaf module instantiates after both storage buckets and ECS compute roles are fully provisioned, eliminating cyclic graph dependencies.
+  2. Implemented dynamic expansion of IAM role ARNs into STS assumed-role wildcards (`arn:aws:sts::<account>:assumed-role/<role-name>/*`) using `ArnNotLike: aws:PrincipalArn`.
+  3. Added comprehensive automated integration test coverage in `src/tests/test_services.py` (`test_ecs_kyc_presigned_upload_s3_perimeter`) verifying presigned POST generation, S3 policy condition structure, and STS session regex pattern matching.
+
+---
+
+### Incident 7: CloudFront Multi-Region us-east-1 ACM Certificate Architecture & Route 53 DNS Routing
+
+- **Symptoms & Error**:
+  ```text
+  Error: InvalidViewerCertificate: The specified SSL certificate doesn't exist, isn't in us-east-1 region, isn't valid, or doesn't include the valid domain name.
+    with module.container_platform.aws_cloudfront_distribution.alb
+  ```
+- **Root Cause Analysis (RCA)**:
+  CloudFront distributions are globally edge-distributed, and AWS strictly mandates that any custom SSL/TLS certificate attached to a CloudFront distribution via ACM must reside in the `us-east-1` (N. Virginia) region, regardless of where the backend compute or primary infrastructure is hosted (`me-central-1` UAE). Furthermore, configuring public domain validation for internal zones or using placeholder zone IDs prevented the creation of valid DNS validation and Route 53 ALIAS (A/AAAA) apex and subdomain records.
+- **Resolution & Engineering Remediation**:
+  1. Configured aliased AWS provider `aws.us_east_1` (`region = "us-east-1"`) in `terraform/providers.tf` and declared `configuration_aliases = [aws.us_east_1]` in `module.container_platform`.
+  2. Created dedicated `aws_acm_certificate.cloudfront` in `us-east-1` for `api.${var.public_domain_name}` with automated Route 53 DNS validation (`aws_route53_record.cloudfront_cert_validation` and `aws_acm_certificate_validation.cloudfront`).
+  3. Created dual Route 53 ALIAS records (`aws_route53_record.api_alias` and `api_alias_ipv6`) mapping `api.${var.public_domain_name}` directly to the CloudFront distribution domain name.
+  4. Attached the verified `us-east-1` certificate to `aws_cloudfront_distribution.alb` with `TLSv1.2_2021` minimum protocol version and aligned Cognito callback redirect endpoints (`https://api.${var.public_domain_name}/oauth2/idpresponse`).

@@ -2,17 +2,6 @@ data "aws_caller_identity" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
-  # Permit current deployment account identity plus explicitly passed roles (e.g. KYC Lambda/ECS, SOAR Lambda)
-  effective_allowed_arns = distinct(concat(
-    [
-      data.aws_caller_identity.current.arn,
-      "arn:aws:iam::${local.account_id}:root",
-      "arn:aws:iam::${local.account_id}:role/pf-broker-kyc-task-role-${var.environment}",
-      "arn:aws:iam::${local.account_id}:role/pf-scan-worker-task-role-${var.environment}",
-      "arn:aws:iam::${local.account_id}:role/pf-kyc-vault-handler-role-${var.environment}"
-    ],
-    var.allowed_principal_arns
-  ))
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -153,62 +142,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "kyc_vault_lifecycle" {
       days_after_initiation = 7
     }
   }
-}
-
-resource "aws_s3_bucket_policy" "kyc_vault_policy" {
-  bucket     = aws_s3_bucket.kyc_vault.id
-  depends_on = [aws_s3_bucket_public_access_block.kyc_vault_pab]
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          aws_s3_bucket.kyc_vault.arn,
-          "${aws_s3_bucket.kyc_vault.arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      },
-      {
-        Sid       = "DenyUnencryptedUploads"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:PutObject"
-        Resource  = "${aws_s3_bucket.kyc_vault.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = "aws:kms"
-          }
-        }
-      },
-      {
-        Sid       = "EnforceDataPerimeter"
-        Effect    = "Deny"
-        Principal = "*"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.kyc_vault.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "aws:SourceVpce" = var.s3_gateway_endpoint_id
-          }
-          ArnNotEquals = {
-            "aws:PrincipalArn" = local.effective_allowed_arns
-          }
-        }
-      }
-    ]
-  })
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
