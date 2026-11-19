@@ -92,7 +92,7 @@ resource "aws_s3_bucket" "kyc_vault" {
   #checkov:skip=CKV_AWS_144: Cross-region replication disabled to comply with UAE PDPL data residency requirements
   #checkov:skip=CKV2_AWS_62: S3 event notifications managed by CloudTrail and EventBridge SOAR rules
   bucket        = "pf-kyc-vault-${var.environment}-${random_id.bucket_suffix.hex}"
-  force_destroy = true
+  force_destroy = var.environment == "production" ? false : true
 
   tags = {
     Name                 = "pf-kyc-vault-${var.environment}"

@@ -23,6 +23,11 @@ enable_observability_dashboard   = true
 ecs_desired_count          = 0
 enable_deletion_protection = false
 
+# Compliance & Detective Controls ($0.00 Idle Spend)
+enable_aws_config                = false
+enable_cloudtrail_s3_data_events = false
+audit_retention_days             = 7
+
 # SOAR Configuration
 containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin"

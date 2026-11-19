@@ -16,8 +16,9 @@ resource "aws_s3_bucket" "audit_logs" {
   #checkov:skip=CKV_AWS_18: S3 access logging intentionally disabled to prevent recurring PUT costs on idle audit bucket
   #checkov:skip=CKV_AWS_144: Cross-region replication disabled to comply with UAE PDPL data residency requirements
   #checkov:skip=CKV2_AWS_62: S3 event notifications managed by CloudTrail and EventBridge
-  bucket        = "pf-shield-audit-${var.environment}-${random_id.audit_bucket_suffix.hex}"
-  force_destroy = true
+  bucket              = "pf-shield-audit-${var.environment}-${random_id.audit_bucket_suffix.hex}"
+  force_destroy       = var.environment == "production" ? false : true
+  object_lock_enabled = true
 
   tags = {
     Name               = "pf-shield-audit-logs-${var.environment}"
@@ -41,6 +42,17 @@ resource "aws_s3_bucket_versioning" "audit_logs_versioning" {
   }
 }
 
+resource "aws_s3_bucket_object_lock_configuration" "audit_logs_lock" {
+  bucket = aws_s3_bucket.audit_logs.id
+
+  rule {
+    default_retention {
+      mode = "COMPLIANCE" # Strict WORM (Write Once, Read Many) compliance
+      days = var.audit_retention_days
+    }
+  }
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "audit_logs_encryption" {
   bucket = aws_s3_bucket.audit_logs.id
 
@@ -57,13 +69,21 @@ resource "aws_s3_bucket_lifecycle_configuration" "audit_logs_lifecycle" {
   bucket = aws_s3_bucket.audit_logs.id
 
   rule {
-    id     = "finops-7-day-log-expiration"
+    id     = "audit-log-retention-and-transition"
     status = "Enabled"
 
     filter {}
 
+    dynamic "transition" {
+      for_each = var.environment == "production" ? [1] : []
+      content {
+        days          = 90
+        storage_class = "GLACIER"
+      }
+    }
+
     expiration {
-      days = 7
+      days = var.audit_retention_days
     }
 
     abort_incomplete_multipart_upload {
@@ -116,6 +136,32 @@ resource "aws_s3_bucket_policy" "audit_logs_policy" {
             "s3:x-amz-acl" = "bucket-owner-full-control"
           }
         }
+      },
+      {
+        Sid    = "AWSConfigAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "config.amazonaws.com"
+        }
+        Action = [
+          "s3:GetBucketAcl",
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.audit_logs.arn
+      },
+      {
+        Sid    = "AWSConfigWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "config.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.audit_logs.arn}/AWSLogs/${local.account_id}/Config/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
       }
     ]
   })
@@ -131,6 +177,19 @@ resource "aws_cloudtrail" "main_audit_trail" {
   is_multi_region_trail         = true
   enable_log_file_validation    = true
   kms_key_id                    = var.kms_key_arn
+
+  dynamic "event_selector" {
+    for_each = var.enable_cloudtrail_s3_data_events && var.kyc_vault_bucket_arn != "" ? [1] : []
+    content {
+      read_write_type           = "All"
+      include_management_events = true
+
+      data_resource {
+        type   = "AWS::S3::Object"
+        values = ["${var.kyc_vault_bucket_arn}/*"]
+      }
+    }
+  }
 
   depends_on = [aws_s3_bucket_policy.audit_logs_policy]
 
@@ -558,7 +617,8 @@ resource "aws_cloudwatch_event_rule" "s3_security_rule" {
         }
       },
       {
-        source = ["pf.security.simulation"]
+        source      = ["pf.security.simulation"]
+        detail-type = ["Simulated S3 Public Exposure Attack", "S3 Exfiltration Simulation"]
       }
     ]
   })
@@ -612,7 +672,8 @@ resource "aws_cloudwatch_event_rule" "iam_security_rule" {
         }
       },
       {
-        source = ["pf.security.simulation"]
+        source      = ["pf.security.simulation"]
+        detail-type = ["Simulated IAM Credential Compromise", "IAM Privilege Escalation Attack"]
       }
     ]
   })

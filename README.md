@@ -45,6 +45,7 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`terraform/modules/observability/`](terraform/modules/observability/): CloudWatch Security Operations dashboard and proactive DLQ/error alarms.
   - [`terraform/modules/secrets/`](terraform/modules/secrets/): SSM Parameter Store (SecureString) encrypted with KMS CMK.
   - [`terraform/modules/identity/`](terraform/modules/identity/): Amazon Cognito User Pool, App Client, and RBAC user groups for authenticated broker identities.
+  - [`terraform/modules/compliance-baseline/`](terraform/modules/compliance-baseline/): AWS Config continuous compliance recording and 8 managed security governance rules.
 - [`services/`](services/): Containerized microservices with multi-stage non-root Dockerfiles:
   - [`services/listings-api/`](services/listings-api/): Public property search and listings service.
   - [`services/broker-kyc-api/`](services/broker-kyc-api/): Authenticated broker KYC document-upload and presign service.
@@ -69,7 +70,7 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`docs/COMPLIANCE_MAPPING.md`](docs/COMPLIANCE_MAPPING.md): Regulatory matrix mapping to UAE PDPL, ISO 27001, and SOC 2.
   - [`docs/WELL_ARCHITECTED_REVIEW.md`](docs/WELL_ARCHITECTED_REVIEW.md): Detailed 6-pillar Well-Architected Framework review.
   - [`docs/REGIONAL_SERVICE_AVAILABILITY.md`](docs/REGIONAL_SERVICE_AVAILABILITY.md): `me-central-1` vs `me-south-1` feature parity audit.
-  - [`docs/runbooks/`](docs/runbooks/): Step-by-step incident response runbooks for compromised credentials and S3 exfiltration.
+  - [`docs/runbooks/`](docs/runbooks/): Step-by-step incident response and operational runbooks for compromised credentials, S3 exfiltration, and disaster recovery/backup restoration.
 
 ---
 
@@ -211,6 +212,26 @@ To demonstrate cloud-native workload security, the platform provisions container
   - ALB -> ECS: TCP 8000 only; no direct internet access to containers.
   - ECS -> RDS: TCP 5432 only.
 - **Network Observability**: Centralized VPC Flow Logs captured in CloudWatch Log Groups with 7-day FinOps retention and KMS CMK encryption.
+
+### 6. Detective Controls, Continuous Compliance & Disaster Recovery
+To satisfy enterprise regulatory audits (UAE PDPL, ISO 27001, SOC 2) and assure continuous availability:
+- **Immutable S3 Audit Destination**: Centralized security log repository protected with **S3 Object Lock** in **`COMPLIANCE`** mode (WORM - Write Once, Read Many). Objects cannot be deleted or overwritten by any user, including the root account. Retention transitions from Standard to Glacier at 90 days, expiring at `audit_retention_days` (365 days in production; 7 days in demo profile).
+- **CloudTrail S3 Data Events**: Granular data access logging enabled on the KYC Vault bucket (`kyc-documents/*`) capturing all `GetObject` and `PutObject` operations for forensic auditability and exfiltration detection.
+- **AWS Config Continuous Compliance**: 8 managed compliance rules actively monitoring account resources:
+  1. `s3-bucket-public-read-prohibited`: Verifies S3 buckets prohibit public read.
+  2. `s3-bucket-public-write-prohibited`: Verifies S3 buckets prohibit public write.
+  3. `encrypted-volumes`: Verifies all attached EBS volumes are encrypted at rest.
+  4. `restricted-common-ports`: Verifies security groups block ingress on high-risk ports (SSH 22, RDP 3389).
+  5. `vpc-default-security-group-closed`: Verifies default security groups deny all inbound and outbound traffic.
+  6. `ec2-imdsv2-check`: Enforces IMDSv2 token hop limit and prohibits legacy IMDSv1.
+  7. `rds-instance-public-access-check`: Verifies RDS databases are not publicly accessible.
+  8. `access-keys-rotated`: Flags IAM access keys older than 90 days.
+- **Decoupled Simulation Schemas**: EventBridge simulation rules match discrete `detail-type` identifiers (`"Simulated S3 Public Exposure Attack"`, `"Simulated IAM Credential Compromise"`), ensuring simulation tests invoke only their intended playbooks without cross-talk.
+- **Disaster Recovery & Data Restoration (RTO < 60 min, RPO < 15 min)**:
+  - **S3 Versioning Delete Marker Rollback**: Accidental or malicious object deletions create soft delete markers; operators can recover data with zero data loss (RPO = 0) by removing the top delete marker.
+  - **DynamoDB Point-in-Time Recovery (PITR)**: Continuous transaction log snapshots allow restoring tables to any second in the preceding 35 days.
+  - **RDS Point-in-Time Recovery**: Continuous WAL archiving facilitates point-in-time database restoration, paired with Route 53 internal DNS CNAME updates for zero-reconfiguration cutover.
+  - Fully documented in [`RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md`](docs/runbooks/RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md) and automated in test suite [`test_disaster_recovery.py`](src/tests/test_disaster_recovery.py).
 
 ---
 

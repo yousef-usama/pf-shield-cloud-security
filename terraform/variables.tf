@@ -75,3 +75,21 @@ variable "enable_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "enable_aws_config" {
+  description = "FinOps toggle to enable AWS Config continuous compliance recording and managed rules"
+  type        = bool
+  default     = false
+}
+
+variable "enable_cloudtrail_s3_data_events" {
+  description = "FinOps toggle to capture CloudTrail S3 data events on KYC vault bucket (enabled in production)"
+  type        = bool
+  default     = false
+}
+
+variable "audit_retention_days" {
+  description = "Retention period in days for audit logs (7 for demo, 365 for production)"
+  type        = number
+  default     = 7
+}

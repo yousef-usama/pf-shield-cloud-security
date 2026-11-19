@@ -57,6 +57,9 @@ module "soar_engine" {
   enable_guardduty_and_securityhub = var.enable_guardduty_and_securityhub
   containment_mode                 = var.containment_mode
   protected_principals_allowlist   = var.protected_principals_allowlist
+  kyc_vault_bucket_arn             = module.zero_trust_kyc_vault.kyc_vault_bucket_arn
+  enable_cloudtrail_s3_data_events = var.enable_cloudtrail_s3_data_events
+  audit_retention_days             = var.audit_retention_days
 }
 
 # 6. Secrets Management & SSM Parameter Store Configuration
@@ -126,4 +129,16 @@ module "observability" {
   kyc_vault_bucket_name      = module.zero_trust_kyc_vault.kyc_vault_bucket_name
   sns_topic_arn              = module.soar_engine.security_incidents_sns_topic_arn
   enable_dashboard           = var.enable_observability_dashboard
+}
+
+# 11. Detective Controls & Continuous Compliance Baseline (AWS Config)
+module "compliance_baseline" {
+  source = "./modules/compliance-baseline"
+
+  aws_region              = var.aws_region
+  environment             = var.environment
+  enable_aws_config       = var.enable_aws_config
+  audit_bucket_name       = module.soar_engine.audit_logs_bucket_name
+  kms_key_arn             = module.zero_trust_kyc_vault.kms_key_arn
+  permission_boundary_arn = module.iam_boundaries.permission_boundary_arn
 }

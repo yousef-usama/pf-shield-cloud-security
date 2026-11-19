@@ -106,3 +106,8 @@ output "ecr_document_scan_worker_repository_url" {
   description = "ECR repository URL for document-scan-worker"
   value       = module.container_platform.ecr_document_scan_worker_repository_url
 }
+
+output "active_compliance_rules_count" {
+  description = "Number of active AWS Config compliance rules"
+  value       = module.compliance_baseline.config_rules_count
+}
