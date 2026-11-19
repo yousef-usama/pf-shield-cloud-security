@@ -111,3 +111,39 @@ output "active_compliance_rules_count" {
   description = "Number of active AWS Config compliance rules"
   value       = module.compliance_baseline.config_rules_count
 }
+
+output "rds_endpoint" {
+  description = "Connection endpoint of the RDS database instance"
+  value       = module.rds.db_endpoint
+}
+
+output "rds_credentials_secret_arn" {
+  description = "Secrets Manager ARN storing RDS master credentials"
+  value       = module.rds.db_credentials_secret_arn
+}
+
+output "internal_db_fqdn" {
+  description = "Route 53 internal FQDN for the database"
+  value       = module.rds.internal_db_fqdn
+}
+
+output "analytics_bucket_name" {
+  description = "Name of the central S3 analytics data lake bucket"
+  value       = module.analytics_lab.analytics_bucket_name
+}
+
+output "clickhouse_instance_id" {
+  description = "EC2 instance ID of the ClickHouse analytics host"
+  value       = module.analytics_lab.clickhouse_instance_id
+}
+
+output "internal_analytics_fqdn" {
+  description = "Route 53 internal FQDN for the ClickHouse analytics node"
+  value       = module.analytics_lab.internal_analytics_fqdn
+}
+
+output "glue_job_name" {
+  description = "Name of the AWS Glue listing sanitization ETL job"
+  value       = module.analytics_lab.glue_job_name
+}
+

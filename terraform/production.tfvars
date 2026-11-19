@@ -26,6 +26,13 @@ enable_aws_config                = true
 enable_cloudtrail_s3_data_events = true
 audit_retention_days             = 365
 
+# Relational Database & Analytics Lab (Production Baseline)
+enable_rds              = true
+rds_instance_class      = "db.t4g.micro"
+enable_analytics_lab    = true
+analytics_instance_type = "t4g.small"
+enable_glue_etl         = true
+
 # SOAR Configuration (Human-in-the-loop escalation + Protected Identities)
 containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin,lead-security-engineer"

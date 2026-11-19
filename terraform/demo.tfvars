@@ -28,6 +28,11 @@ enable_aws_config                = false
 enable_cloudtrail_s3_data_events = false
 audit_retention_days             = 7
 
+# Relational Database & Analytics Lab ($0.00 Idle Spend)
+enable_rds           = false
+enable_analytics_lab = false
+enable_glue_etl      = false
+
 # SOAR Configuration
 containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin"

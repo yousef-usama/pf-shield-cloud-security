@@ -142,3 +142,38 @@ module "compliance_baseline" {
   kms_key_arn             = module.zero_trust_kyc_vault.kms_key_arn
   permission_boundary_arn = module.iam_boundaries.permission_boundary_arn
 }
+
+# 12. Secure Relational Database Tier (Amazon RDS PostgreSQL)
+module "rds" {
+  source = "./modules/rds"
+
+  environment                = var.environment
+  aws_region                 = var.aws_region
+  enable_rds                 = var.enable_rds
+  rds_instance_class         = var.rds_instance_class
+  private_db_subnet_ids      = module.network.private_db_subnet_ids
+  database_security_group_id = module.network.database_security_group_id
+  kms_key_arn                = module.zero_trust_kyc_vault.kms_key_arn
+  internal_hosted_zone_id    = module.network.internal_hosted_zone_id
+  permission_boundary_arn    = module.iam_boundaries.permission_boundary_arn
+  enable_deletion_protection = var.enable_deletion_protection
+  audit_retention_days       = var.audit_retention_days
+}
+
+# 13. Isolated Analytics Demonstration Lab & AWS Glue Data Sanitization
+module "analytics_lab" {
+  source = "./modules/analytics-lab"
+
+  environment             = var.environment
+  aws_region              = var.aws_region
+  vpc_id                  = module.network.vpc_id
+  private_app_subnet_ids  = module.network.private_app_subnet_ids
+  ecs_security_group_id   = module.network.ecs_security_group_id
+  kms_key_arn             = module.zero_trust_kyc_vault.kms_key_arn
+  internal_hosted_zone_id = module.network.internal_hosted_zone_id
+  permission_boundary_arn = module.iam_boundaries.permission_boundary_arn
+  enable_analytics_lab    = var.enable_analytics_lab
+  analytics_instance_type = var.analytics_instance_type
+  enable_glue_etl         = var.enable_glue_etl
+}
+

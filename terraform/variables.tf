@@ -93,3 +93,34 @@ variable "audit_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "enable_rds" {
+  description = "FinOps toggle to provision the private RDS PostgreSQL metadata database (enabled in production)"
+  type        = bool
+  default     = false
+}
+
+variable "rds_instance_class" {
+  description = "Instance class for RDS PostgreSQL database"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "enable_analytics_lab" {
+  description = "FinOps toggle to provision the isolated ClickHouse EC2 analytics node"
+  type        = bool
+  default     = false
+}
+
+variable "analytics_instance_type" {
+  description = "Instance type for the ClickHouse analytics host"
+  type        = string
+  default     = "t4g.small"
+}
+
+variable "enable_glue_etl" {
+  description = "FinOps toggle to provision the AWS Glue listing sanitization ETL pipeline"
+  type        = bool
+  default     = false
+}
+

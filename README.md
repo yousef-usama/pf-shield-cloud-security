@@ -46,6 +46,8 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`terraform/modules/secrets/`](terraform/modules/secrets/): SSM Parameter Store (SecureString) encrypted with KMS CMK.
   - [`terraform/modules/identity/`](terraform/modules/identity/): Amazon Cognito User Pool, App Client, and RBAC user groups for authenticated broker identities.
   - [`terraform/modules/compliance-baseline/`](terraform/modules/compliance-baseline/): AWS Config continuous compliance recording and 8 managed security governance rules.
+  - [`terraform/modules/rds/`](terraform/modules/rds/): Hardened RDS PostgreSQL 16 relational store with KMS CMK encryption, TLS parameter enforcement, automated backups, and Secrets Manager credential governance.
+  - [`terraform/modules/analytics-lab/`](terraform/modules/analytics-lab/): Isolated security demonstration lab featuring hardened ClickHouse EC2 node (IMDSv2, SSM-only, zero SSH), S3 analytics data lake, and AWS Glue ETL sanitization.
 - [`services/`](services/): Containerized microservices with multi-stage non-root Dockerfiles:
   - [`services/listings-api/`](services/listings-api/): Public property search and listings service.
   - [`services/broker-kyc-api/`](services/broker-kyc-api/): Authenticated broker KYC document-upload and presign service.
@@ -56,6 +58,7 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`pr-checkov.yml`](.github/workflows/pr-checkov.yml): Targeted PR gate running Checkov static analysis on any Terraform changes.
   - [`terraform-destroy.yml`](.github/workflows/terraform-destroy.yml): Manual-dispatch 1-click teardown workflow for zero idle cost decommissioning.
 - [`src/app/`](src/app/): Application handlers (`property_api_handler.py` and `kyc_vault_handler.py`).
+- [`src/analytics/`](src/analytics/): AWS Glue ETL listing sanitization and PII scrubbing pipeline (`glue_etl_sanitize_listings.py`).
 - [`src/soar/`](src/soar/): Automated incident response playbooks (`playbook_s3_lockdown.py` and `playbook_iam_quarantine.py`).
 - [`src/tests/`](src/tests/): Automated unit test suite using `pytest` and `moto` AWS mocks.
 - [`k8s-security-policies/`](k8s-security-policies/): Kyverno ClusterPolicies and hardened Kubernetes manifests demonstrating shift-left container security.
@@ -232,6 +235,24 @@ To satisfy enterprise regulatory audits (UAE PDPL, ISO 27001, SOC 2) and assure 
   - **DynamoDB Point-in-Time Recovery (PITR)**: Continuous transaction log snapshots allow restoring tables to any second in the preceding 35 days.
   - **RDS Point-in-Time Recovery**: Continuous WAL archiving facilitates point-in-time database restoration, paired with Route 53 internal DNS CNAME updates for zero-reconfiguration cutover.
   - Fully documented in [`RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md`](docs/runbooks/RUNBOOK-03-Disaster-Recovery-And-Backup-Restoration.md) and automated in test suite [`test_disaster_recovery.py`](src/tests/test_disaster_recovery.py).
+
+### 7. Relational Data Protection, Host Hardening & Secure Analytics Pipeline
+To demonstrate comprehensive data governance across relational stores, host-level compute, and big-data analytics architectures:
+- **Hardened Amazon RDS PostgreSQL 16**:
+  - **Private Network Isolation**: Hosted across isolated database subnets (`10.20.20.0/24`, `10.20.21.0/24`) with `publicly_accessible = false` and 0 internet routes. Security group restricts ingress on port 5432 strictly to the ECS application tier.
+  - **Cryptographic Enforcement**: Storage encrypted at rest via dedicated KMS CMK (`storage_encrypted = true`), and in transit via custom parameter group setting `rds.force_ssl = "1"`.
+  - **Credential Governance**: Master administrative credentials dynamically generated, stored, and retrieved via AWS Secrets Manager with KMS CMK encryption (`pf-shield/database/credentials/${environment}`), eliminating hardcoded secrets.
+  - **Production High Availability & Auditing**: Configured for Multi-AZ redundancy, 35-day backup retention, Enhanced Monitoring, Performance Insights, and internal Route 53 DNS addressing (`db.pf-shield.internal`).
+- **Hardened EC2 ClickHouse Analytics Node (Demonstration Lab)**:
+  - *Context*: Clearly identified as an isolated security demonstration environment rather than an internal implementation of any commercial entity.
+  - **Zero-Port Bastionless Administration**: Port 22 (SSH) is completely closed with 0 inbound rules from the internet. Administrative management is performed via AWS Systems Manager Session Manager with IAM instance profile `pf-shield-clickhouse-profile`.
+  - **Host-Level Hardening**: Enforces IMDSv2 strictly (`http_tokens = "required"`, `http_put_response_hop_limit = 1`), preventing SSRF credential theft. Root EBS volume is encrypted using KMS CMK. Query ingress on port 8123 is strictly scoped to the private ECS security group.
+  - **Service Discovery**: Resolvable across private subnets via Route 53 A record `analytics.pf-shield.internal`.
+- **AWS Glue ETL Sanitization & S3 Data Lake Pipeline**:
+  - **S3 Analytics Data Lake**: Dedicated bucket (`pf-shield-analytics-${env}-${account_id}`) partitioned into `raw/` and `curated/` prefixes, enforcing S3 Bucket Keys, SSE-KMS CMK encryption, and public access blocks.
+  - **Automated PII Stripping**: AWS Glue ETL job ([`glue_etl_sanitize_listings.py`](src/analytics/glue_etl_sanitize_listings.py)) cleans raw property feeds, dropping sensitive broker and landlord PII (`broker_emirates_id`, `broker_phone`, `broker_email`, `landlord_contact`).
+  - **Cryptographic Broker Pseudonymization**: Derives irreversible salted SHA-256 pseudonyms (`anonymized_broker_hash`), enabling aggregate market analytics without exposing personal data under UAE PDPL.
+  - **Security Configuration**: Encrypts CloudWatch Logs, S3 outputs, and job bookmarks using KMS CMK.
 
 ---
 
