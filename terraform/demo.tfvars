@@ -22,6 +22,7 @@ enable_observability_dashboard   = true
 # ECS Container Platform (Scale-to-Zero for $0.00 Idle Compute)
 ecs_desired_count          = 0
 enable_deletion_protection = false
+enable_cloudfront          = false
 
 # Compliance & Detective Controls ($0.00 Idle Spend)
 enable_aws_config                = false

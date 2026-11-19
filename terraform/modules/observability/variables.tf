@@ -44,3 +44,22 @@ variable "enable_dashboard" {
   type        = bool
   default     = true
 }
+
+variable "alb_arn_suffix" {
+  description = "ARN suffix of the Application Load Balancer for CloudWatch metrics"
+  type        = string
+  default     = null
+}
+
+variable "waf_web_acl_name" {
+  description = "Name of the WAFv2 WebACL for CloudWatch metric alarms"
+  type        = string
+  default     = null
+}
+
+variable "enable_waf" {
+  description = "Whether WAF is enabled for alarm provisioning"
+  type        = bool
+  default     = false
+}
+

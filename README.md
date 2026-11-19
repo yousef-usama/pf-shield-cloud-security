@@ -95,6 +95,8 @@ Real estate platforms handle millions of property listings and tens of thousands
 | **Data Encryption** | **KMS CMK + S3 Bucket Keys** | AWS Managed Key (`aws/s3`), Client-Side Encryption | Fulfills UAE PDPL Art. 13 cryptographic separation; S3 Bucket Keys reduce KMS request fees by 99%. | Incurs a baseline $1.00/month fee for the Customer Managed Key. |
 | **Event Routing** | **Amazon EventBridge** | CloudWatch Logs Metric Filters, SNS Fanout | Native content filtering on CloudTrail and GuardDuty schemas; decoupled, declarative JSON event rules. | EventBridge bus adds up to ~1.5s latency compared to synchronous webhooks. |
 | **Container Governance** | **Kyverno Policy-as-Code (CI CLI)** | Live EKS Cluster + OPA Gatekeeper | Validates Kubernetes security policies shift-left without incurring $73.00/month for an idle EKS control plane. | Policies validated at build time in CI rather than live admission webhook enforcement. |
+| **Edge DDoS Defense** | **AWS Shield Standard + WAFv2** | AWS Shield Advanced ($3,000/mo) | Automatic Layer 3/4 DDoS protection ($0.00) paired with custom rate-limiting WAF rules; maintains FinOps cost guardrails. | Does not provide financial cost protection for auto-scaling DDoS spikes or 24/7 dedicated Shield Response Team. |
+| **Edge Acceleration & TLS** | **CloudFront + Custom Header Origin Auth** | Direct ALB Exposure | Terminates TLS 1.3 at global edge locations, enforces modern security headers, and validates `X-Origin-Verify` at the ALB. | Introduces edge-to-origin latency overhead when requests miss cache. |
 
 ---
 
@@ -253,6 +255,37 @@ To demonstrate comprehensive data governance across relational stores, host-leve
   - **Automated PII Stripping**: AWS Glue ETL job ([`glue_etl_sanitize_listings.py`](src/analytics/glue_etl_sanitize_listings.py)) cleans raw property feeds, dropping sensitive broker and landlord PII (`broker_emirates_id`, `broker_phone`, `broker_email`, `landlord_contact`).
   - **Cryptographic Broker Pseudonymization**: Derives irreversible salted SHA-256 pseudonyms (`anonymized_broker_hash`), enabling aggregate market analytics without exposing personal data under UAE PDPL.
   - **Security Configuration**: Encrypts CloudWatch Logs, S3 outputs, and job bookmarks using KMS CMK.
+
+### 8. Edge Security, WAFv2, CloudFront & AWS Shield Defense Model
+To defend the platform against Layer 3, Layer 4, and Layer 7 cyber attacks, credential stuffing, scraping, and volumetric distributed denial of service:
+- **Global Edge Acceleration via Amazon CloudFront**:
+  - Fronts the Application Load Balancer with HTTP/3 support and regional edge caching for static assets.
+  - **Custom Origin Header Verification**: Generates a high-entropy secret (`X-Origin-Verify`) passed from CloudFront to the ALB, ensuring requests cannot bypass edge protections by calling the ALB DNS name directly.
+  - **Response Security Headers**: Injects defense-in-depth HTTP headers on all edge responses:
+    - `Strict-Transport-Security` (HSTS: `max-age=63072000; includeSubDomains; preload`).
+    - `X-Frame-Options: DENY` (clickjacking mitigation).
+    - `X-Content-Type-Options: nosniff` (MIME confusion prevention).
+    - `Referrer-Policy: strict-origin-when-cross-origin`.
+  - **Geo-Restriction**: Whitelists authorized access to designated jurisdictions (`AE`, `SA`, `BH`, `KW`, `OM`, `QA`, `US`, `GB`), satisfying UAE/GCC compliance requirements.
+- **Multi-Layer AWS WAFv2 WebACL Inspection**:
+  - Associated with both the Edge HTTP API Gateway and the public Application Load Balancer with 6 prioritized rules:
+    1. `RateLimitScrapers` (Priority 10): Blocks IP addresses exceeding 100 requests per 5 minutes.
+    2. `BrokerUploadRateLimit` (Priority 15): Scoped specifically to broker upload paths (`/kyc`), blocking IPs exceeding 50 requests per 5 minutes to prevent automated file flooding and credential abuse.
+    3. `AWSManagedRulesCommonRuleSet` (Priority 20): OWASP Top 10 core web vulnerabilities.
+    4. `AWSManagedRulesSQLiRuleSet` (Priority 30): SQL injection patterns.
+    5. `AWSManagedRulesKnownBadInputsRuleSet` (Priority 40): Known bad inputs and Log4j (CVE-2021-44228) exploit attempts.
+    6. `AWSManagedRulesAmazonIpReputationList` (Priority 50): Threat intelligence-backed blocking of active botnets, Tor nodes, and scanners.
+- **AWS Shield Defense Model: Standard vs. Advanced Justification**:
+  - **AWS Shield Standard ($0.00 / month)**: Automatically active across all public AWS endpoints (ALB, CloudFront, Route 53, API Gateway). Provides comprehensive Layer 3/4 protection against SYN/UDP floods, reflection attacks, and volumetric exhaustion without incurring monthly subscription fees.
+  - **AWS Shield Advanced Enterprise Decision Criteria ($3,000 / month + 1-year commit)**:
+    - *Economic & SLA Justification*: Justified only when production downtime cost exceeds ~$36,000/year or when the platform experiences continuous sophisticated Layer 7 attacks requiring 24/7 AWS Shield Response Team (SRT) manual intervention.
+    - *Financial Cost Protection*: Shield Advanced reimburses scaling costs resulting from spike traffic during legitimate DDoS attacks (e.g., auto-scaling ECS task and bandwidth surcharges).
+    - *Cross-Account Central Orchestration*: Integrates with AWS Firewall Manager to enforce security policies across enterprise AWS Organizations.
+- **Proactive CloudWatch Edge Security Alarms**:
+  - `pf-waf-blocked-requests-high`: Triggers when WAF blocks > 50 requests in 5 minutes.
+  - `pf-waf-ratelimit-scrapers`: Triggers when scraper rate limiting is actively engaged (> 20 blocks in 5 minutes).
+  - `pf-alb-target-5xx-high`: Alerts when target containers return > 10 HTTP 5xx responses in 5 minutes.
+  - `pf-alb-target-4xx-probing`: Alerts when 4xx client errors spike (> 100 in 5 minutes), detecting automated fuzzers and reconnaissance.
 
 ---
 

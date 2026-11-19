@@ -147,3 +147,14 @@ output "glue_job_name" {
   value       = module.analytics_lab.glue_job_name
 }
 
+output "cloudfront_distribution_id" {
+  description = "CloudFront edge CDN distribution ID"
+  value       = module.container_platform.cloudfront_distribution_id
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront edge CDN domain name"
+  value       = module.container_platform.cloudfront_domain_name
+}
+
+

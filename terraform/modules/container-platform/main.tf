@@ -390,6 +390,7 @@ resource "aws_lb" "main" {
   #checkov:skip=CKV_AWS_91: ALB access logging omitted on demo tier to prevent idle S3 PUT fees
   #checkov:skip=CKV2_AWS_20: AWS WAF association managed conditionally in production profile
   #checkov:skip=CKV2_AWS_28: Public ALB protected by WAF in production; toggleable for $0.00 idle demo profile
+  #checkov:skip=CKV2_AWS_76: ALB WAF WebACL in edge-api-waf module includes AWSManagedRulesKnownBadInputsRuleSet for Log4j mitigation
   name                       = "pf-shield-alb-${var.environment}"
   internal                   = false
   load_balancer_type         = "application"
@@ -534,6 +535,113 @@ resource "aws_lb_listener_rule" "broker_kyc_api" {
     path_pattern {
       values = ["/api/v1/kyc/*"]
     }
+  }
+}
+
+# WAFv2 Association for Public Application Load Balancer
+resource "aws_wafv2_web_acl_association" "alb_waf" {
+  count        = var.waf_web_acl_arn != null ? 1 : 0
+  resource_arn = aws_lb.main.arn
+  web_acl_arn  = var.waf_web_acl_arn
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# CLOUDFRONT EDGE DISTRIBUTION & SECURITY RESPONSE HEADERS
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "random_password" "origin_verify" {
+  count   = var.enable_cloudfront ? 1 : 0
+  length  = 32
+  special = false
+}
+
+resource "aws_cloudfront_response_headers_policy" "security_headers" {
+  count = var.enable_cloudfront ? 1 : 0
+  name  = "pf-shield-security-headers-${var.environment}"
+
+  security_headers_config {
+    content_type_options {
+      override = true
+    }
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+    strict_transport_security {
+      access_control_max_age_sec = 63072000
+      include_subdomains         = true
+      preload                    = true
+      override                   = true
+    }
+  }
+}
+
+resource "aws_cloudfront_distribution" "alb" {
+  #checkov:skip=CKV_AWS_86: Access logging disabled to prevent recurring S3 PUT fees on demo tier
+  #checkov:skip=CKV_AWS_310: Failover origin group omitted for single-region reference architecture
+  #checkov:skip=CKV_AWS_305: Global WAF attachment optional on demo profile; regional WAF protects ALB
+  #checkov:skip=CKV_AWS_68: CloudFront WAF requires CLOUDFRONT scope in us-east-1; edge protection enforced at regional ALB via WAFv2 in me-central-1
+  #checkov:skip=CKV_AWS_174: Custom SSL certificate in us-east-1 required for minimum_protocol_version; default certificate used in reference architecture
+  #checkov:skip=CKV2_AWS_42: CloudFront custom ACM certificate requires deployment in us-east-1; demo reference uses default distribution certificate
+  #checkov:skip=CKV2_AWS_47: CloudFront WAF requires CLOUDFRONT scope in us-east-1; edge protection enforced at regional ALB via WAFv2 in me-central-1
+  count = var.enable_cloudfront ? 1 : 0
+
+  enabled         = true
+  is_ipv6_enabled = true
+  comment         = "PF-Shield Global Edge CloudFront Distribution"
+  http_version    = "http2and3"
+
+  origin {
+    domain_name = aws_lb.main.dns_name
+    origin_id   = "ALB-${aws_lb.main.name}"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+
+    custom_header {
+      name  = "X-Origin-Verify"
+      value = random_password.origin_verify[0].result
+    }
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "ALB-${aws_lb.main.name}"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    # AWS Managed CachingDisabled policy (4135ea2d-6df8-44a3-9df3-4b5a84be39ad) for dynamic API routing
+    cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+
+    # AWS Managed AllViewer origin request policy (216adef6-5c7f-47e4-b989-5492eafa07d3)
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers[0].id
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "whitelist"
+      locations        = ["AE", "SA", "BH", "KW", "OM", "QA", "US", "GB"]
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  tags = {
+    Name        = "pf-shield-cloudfront-${var.environment}"
+    Environment = var.environment
   }
 }
 

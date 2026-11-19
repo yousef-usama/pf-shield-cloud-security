@@ -114,6 +114,8 @@ module "container_platform" {
   sns_topic_arn              = module.soar_engine.security_incidents_sns_topic_arn
   ecs_desired_count          = var.ecs_desired_count
   enable_deletion_protection = var.enable_deletion_protection
+  waf_web_acl_arn            = module.edge_api_waf.waf_web_acl_arn
+  enable_cloudfront          = var.enable_cloudfront
 }
 
 # 10. Observability, Security Ops Dashboard & Metric Alarms
@@ -129,6 +131,9 @@ module "observability" {
   kyc_vault_bucket_name      = module.zero_trust_kyc_vault.kyc_vault_bucket_name
   sns_topic_arn              = module.soar_engine.security_incidents_sns_topic_arn
   enable_dashboard           = var.enable_observability_dashboard
+  alb_arn_suffix             = module.container_platform.alb_arn_suffix
+  waf_web_acl_name           = module.edge_api_waf.waf_web_acl_name
+  enable_waf                 = var.enable_waf
 }
 
 # 11. Detective Controls & Continuous Compliance Baseline (AWS Config)

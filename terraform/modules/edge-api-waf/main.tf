@@ -394,7 +394,44 @@ resource "aws_wafv2_web_acl" "edge_waf" {
     }
   }
 
-  # Rule 2: OWASP Top 10 Core Rule Set
+  # Rule 2: Broker Upload Protection (> 50 upload presign requests per 5 minutes per IP)
+  rule {
+    name     = "BrokerUploadRateLimit"
+    priority = 15
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = 50
+        aggregate_key_type = "IP"
+
+        scope_down_statement {
+          byte_match_statement {
+            search_string = "/kyc"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "LOWERCASE"
+            }
+            positional_constraint = "CONTAINS"
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "BrokerUploadRateLimitMetric"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # Rule 3: OWASP Top 10 Core Rule Set
   rule {
     name     = "AWSManagedRulesCommonRuleSet"
     priority = 20
@@ -459,6 +496,29 @@ resource "aws_wafv2_web_acl" "edge_waf" {
     visibility_config {
       cloudwatch_metrics_enabled = true
       metric_name                = "KnownBadInputsMetric"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # Rule 6: Amazon IP Reputation List (Known malicious threat actors and bots)
+  rule {
+    name     = "AWSManagedRulesAmazonIpReputationList"
+    priority = 50
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesAmazonIpReputationList"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AmazonIpReputationMetric"
       sampled_requests_enabled   = true
     }
   }

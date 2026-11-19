@@ -47,3 +47,19 @@ output "document_scan_worker_service_name" {
   description = "The name of the document scan worker ECS service"
   value       = aws_ecs_service.document_scan_worker.name
 }
+
+output "alb_arn_suffix" {
+  description = "ARN suffix of the Application Load Balancer for CloudWatch metrics"
+  value       = aws_lb.main.arn_suffix
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront edge CDN distribution ID"
+  value       = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].id : null
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront edge CDN domain name"
+  value       = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].domain_name : null
+}
+

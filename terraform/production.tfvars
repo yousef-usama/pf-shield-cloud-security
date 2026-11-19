@@ -20,6 +20,7 @@ enable_observability_dashboard   = true
 # ECS Container Platform (Production HA across Private Subnets)
 ecs_desired_count          = 2
 enable_deletion_protection = true
+enable_cloudfront          = true
 
 # Compliance & Detective Controls (Production Baseline)
 enable_aws_config                = true

@@ -161,3 +161,84 @@ resource "aws_cloudwatch_metric_alarm" "soar_lambda_errors" {
     FunctionName = var.s3_lockdown_lambda_name
   }
 }
+
+resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests_high" {
+  count               = var.enable_waf && var.waf_web_acl_name != null ? 1 : 0
+  alarm_name          = "pf-waf-blocked-requests-high-${var.environment}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "BlockedRequests"
+  namespace           = "AWS/WAFV2"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 50
+  alarm_description   = "High: WAFv2 WebACL blocked more than 50 malicious requests in 5 minutes"
+  alarm_actions       = [var.sns_topic_arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    WebACL = var.waf_web_acl_name
+    Region = "me-central-1"
+    Rule   = "ALL"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "waf_ratelimit_triggered" {
+  count               = var.enable_waf && var.waf_web_acl_name != null ? 1 : 0
+  alarm_name          = "pf-waf-ratelimit-scrapers-${var.environment}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "BlockedRequests"
+  namespace           = "AWS/WAFV2"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 20
+  alarm_description   = "Medium: WAF anti-scraping rate limit triggered by aggressive IP"
+  alarm_actions       = [var.sns_topic_arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    WebACL = var.waf_web_acl_name
+    Region = "me-central-1"
+    Rule   = "RateLimitScrapers"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
+  count               = var.alb_arn_suffix != null ? 1 : 0
+  alarm_name          = "pf-alb-target-5xx-high-${var.environment}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 10
+  alarm_description   = "Critical: Application Load Balancer targets returning elevated 5xx error rates"
+  alarm_actions       = [var.sns_topic_arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = var.alb_arn_suffix
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "alb_4xx_probing" {
+  count               = var.alb_arn_suffix != null ? 1 : 0
+  alarm_name          = "pf-alb-target-4xx-probing-${var.environment}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "HTTPCode_Target_4XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 100
+  alarm_description   = "High: Elevated 4xx error rate on ALB targets indicating automated directory fuzzing"
+  alarm_actions       = [var.sns_topic_arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = var.alb_arn_suffix
+  }
+}
+

@@ -124,3 +124,10 @@ variable "enable_glue_etl" {
   default     = false
 }
 
+variable "enable_cloudfront" {
+  description = "FinOps toggle to provision CloudFront edge CDN distribution in front of ALB (disabled in demo to prevent idle charges)"
+  type        = bool
+  default     = false
+}
+
+

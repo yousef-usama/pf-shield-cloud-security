@@ -71,3 +71,16 @@ variable "enable_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "waf_web_acl_arn" {
+  description = "Optional WAFv2 WebACL ARN to associate with the Application Load Balancer"
+  type        = string
+  default     = null
+}
+
+variable "enable_cloudfront" {
+  description = "Toggle to provision CloudFront edge CDN distribution in front of ALB"
+  type        = bool
+  default     = false
+}
+

@@ -42,3 +42,8 @@ output "waf_web_acl_arn" {
   description = "The ARN of the WAFv2 WebACL (if enabled)"
   value       = var.enable_waf ? aws_wafv2_web_acl.edge_waf[0].arn : null
 }
+
+output "waf_web_acl_name" {
+  description = "The name of the WAFv2 WebACL (if enabled)"
+  value       = var.enable_waf ? aws_wafv2_web_acl.edge_waf[0].name : null
+}
