@@ -39,6 +39,18 @@ variable "permission_boundary_arn" {
   type        = string
 }
 
+variable "ssm_ec2_permission_boundary_arn" {
+  description = "Dedicated IAM Permission Boundary ARN for EC2 SSM Session Manager role"
+  type        = string
+  default     = null
+}
+
+variable "glue_permission_boundary_arn" {
+  description = "Dedicated IAM Permission Boundary ARN for Glue ETL service role"
+  type        = string
+  default     = null
+}
+
 variable "enable_analytics_lab" {
   description = "Toggle to provision the ClickHouse EC2 analytics node"
   type        = bool

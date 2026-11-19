@@ -30,3 +30,9 @@ variable "permission_boundary_arn" {
   description = "IAM Permission Boundary ARN enforcing zero-trust guardrails on Config service role"
   type        = string
 }
+
+variable "config_permission_boundary_arn" {
+  description = "Dedicated IAM Permission Boundary ARN for AWS Config recording role"
+  type        = string
+  default     = null
+}

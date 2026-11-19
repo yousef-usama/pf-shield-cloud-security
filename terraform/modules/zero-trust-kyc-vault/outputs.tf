@@ -32,3 +32,18 @@ output "dynamodb_table_arn" {
   description = "The ARN of the properties & KYC DynamoDB table"
   value       = aws_dynamodb_table.properties_metadata.arn
 }
+
+output "sqs_scan_queue_arn" {
+  description = "The ARN of the SQS document scanning queue"
+  value       = aws_sqs_queue.document_scan_queue.arn
+}
+
+output "sqs_scan_queue_url" {
+  description = "The URL of the SQS document scanning queue"
+  value       = aws_sqs_queue.document_scan_queue.id
+}
+
+output "sqs_scan_dlq_arn" {
+  description = "The ARN of the SQS document scanning dead letter queue"
+  value       = aws_sqs_queue.document_scan_dlq.arn
+}

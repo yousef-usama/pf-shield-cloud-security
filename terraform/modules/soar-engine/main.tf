@@ -341,7 +341,10 @@ resource "aws_iam_role_policy" "s3_lockdown_permissions" {
           "s3:PutBucketPublicAccessBlock",
           "s3:GetBucketPublicAccessBlock"
         ]
-        Resource = "arn:aws:s3:::pf-*"
+        Resource = [
+          "arn:aws:s3:::pf-shield-*",
+          "arn:aws:s3:::pf-kyc-*"
+        ]
       },
       {
         Sid    = "IAMQuarantineAttachment"
@@ -350,7 +353,10 @@ resource "aws_iam_role_policy" "s3_lockdown_permissions" {
           "iam:AttachRolePolicy",
           "iam:AttachUserPolicy"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:aws:iam::${local.account_id}:role/pf-*",
+          "arn:aws:iam::${local.account_id}:user/pf-*"
+        ]
       },
       {
         Sid    = "NotificationAndTelemetry"
@@ -403,9 +409,9 @@ resource "aws_iam_role_policy" "s3_lockdown_permissions" {
 }
 
 resource "aws_cloudwatch_log_group" "s3_lockdown_logs" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/aws/lambda/pf-soar-s3-lockdown-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.audit_retention_days
   kms_key_id        = var.kms_key_arn
 }
 
@@ -486,7 +492,10 @@ resource "aws_iam_role_policy" "iam_quarantine_permissions" {
           "iam:ListAccessKeys",
           "iam:UpdateAccessKey"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:aws:iam::${local.account_id}:role/pf-*",
+          "arn:aws:iam::${local.account_id}:user/pf-*"
+        ]
       },
       {
         Sid    = "NotificationAndTelemetry"
@@ -538,9 +547,9 @@ resource "aws_iam_role_policy" "iam_quarantine_permissions" {
 }
 
 resource "aws_cloudwatch_log_group" "iam_quarantine_logs" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/aws/lambda/pf-soar-iam-quarantine-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.audit_retention_days
   kms_key_id        = var.kms_key_arn
 }
 

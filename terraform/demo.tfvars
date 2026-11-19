@@ -37,3 +37,11 @@ enable_glue_etl      = false
 # SOAR Configuration
 containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin"
+
+# Public Domain & Retention Settings (Demo Profile)
+public_domain_name      = "pf-shield.demo"
+route53_zone_id         = ""
+container_image_tag     = "latest"
+log_retention_days      = 7
+enable_waf_logging      = false
+enable_alb_cognito_auth = false

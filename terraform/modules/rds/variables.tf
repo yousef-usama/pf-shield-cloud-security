@@ -46,6 +46,12 @@ variable "permission_boundary_arn" {
   type        = string
 }
 
+variable "rds_monitoring_permission_boundary_arn" {
+  description = "Dedicated IAM Permission Boundary ARN for RDS Enhanced Monitoring role"
+  type        = string
+  default     = null
+}
+
 variable "enable_deletion_protection" {
   description = "Enable deletion protection on the database instance"
   type        = bool

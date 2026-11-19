@@ -15,8 +15,8 @@ flowchart TD
     subgraph SixPillars ["AWS Well-Architected Framework: PF-Shield Implementation"]
         direction TB
         P1["1. Cost Optimization (FinOps)<br/>• VPC Gateway Endpoints ($0.00/hr)<br/>• S3 Bucket Keys (99% KMS request cut)<br/>• Scale-to-Zero Serverless & Fargate<br/>• Dual Profiles: demo.tfvars vs production.tfvars"]
-        P2["2. Security (Zero-Trust Control Plane)<br/>• Cognito JWT & Server-Side Claims Derivation<br/>• Multi-Tier VPC (Zero Public Database Routes)<br/>• S3 Triple-Deny & Object Lock COMPLIANCE<br/>• Automated SOAR in < 1.5s & Supply Chain SHA Pinning"]
-        P3["3. Operational Excellence<br/>• 13 Modular IaC Components + Isolated Bootstrap<br/>• 44 Automated Unit/Integration Tests (Moto)<br/>• 788 Checkov IaC Checks (0 Failures)<br/>• 3 Production Incident Runbooks & Forensics"]
+        P2["2. Security (Zero-Trust Control Plane)<br/>• Cognito RS256 JWKS & Decoupled Boundaries<br/>• Multi-Tier VPC (Zero Public Database Routes)<br/>• S3 Triple-Deny & Object Lock COMPLIANCE<br/>• Automated SOAR in < 1.5s & Supply Chain SHA Pinning"]
+        P3["3. Operational Excellence<br/>• 13 Modular IaC Components + Isolated Bootstrap<br/>• 46 Automated Unit/Integration Tests (Moto)<br/>• 892 Checkov IaC Checks (0 Failures)<br/>• 3 Production Incident Runbooks & Forensics"]
         P4["4. Reliability & Disaster Recovery<br/>• Multi-AZ Serverless & Container Placement<br/>• SQS Dead Letter Queues (Zero Dropped Alerts)<br/>• S3 Versioning Delete Marker Rollback (RPO = 0)<br/>• RDS & DynamoDB Point-in-Time Recovery (PITR)"]
         P5["5. Performance Efficiency<br/>• CloudFront Global Edge CDN with HTTP/3<br/>• Graviton2 (arm64) Serverless Compute<br/>• S3 Direct-to-Object Presigned POST Uploads<br/>• Single-Digit Millisecond DynamoDB Reads"]
         P6["6. Sustainability<br/>• Zero Idle Compute Carbon Footprint in Demo<br/>• Graviton2 60% Energy Efficiency Improvement<br/>• Ephemeral Container & ETL Lifecycle"]
@@ -48,16 +48,19 @@ flowchart TD
 ### Pillar 2: Security (Zero-Trust Control Plane)
 
 1. **Identity & Access Management (IAM)**:
+   - **Decoupled Scoped Permission Boundaries**: 6 discrete boundaries (`ecs_execution`, `ecs_task`, `config`, `glue`, `rds_monitoring`, `ssm_ec2`) eliminate generic boundary sprawl and enforce least-privilege guardrails per service type.
    - **Workload Permission Boundary** (`pf-workload-permission-boundary`): Enforces regional operation strictly within `me-central-1`, prohibits deletion of the boundary itself, forbids creating unconstrained IAM roles, and denies tampering with audit logs or public access blocks.
    - **Dedicated SOAR Permission Boundary**: Decouples containment permissions from standard workload boundaries, enabling auto-remediation playbooks to execute `s3:PutBucketPublicAccessBlock` and attach quarantine deny-all policies without boundary inheritance conflicts.
    - **Protected-Principals Allowlist**: Prevents denial-of-service on operations by bypassing automated containment for trusted identities (`root`, `pf-shield-github-actions`, `break-glass`).
-   - **Cognito OIDC & Server-Side Claims Derivation**: End-user broker identities authenticate via Amazon Cognito. API Gateway verifies signed JWTs. Handlers extract `custom:tenant_id` and `custom:broker_id` strictly server-side, rejecting caller-supplied body parameters to prevent tenant traversal attacks.
+   - **Cognito OIDC & JWKS Cryptographic Signature Verification**: End-user broker identities authenticate via Amazon Cognito. FastAPI and API Gateway strictly verify RS256 signatures against Cognito JWKS (`kid`, `iss`, `aud`/`client_id`, `token_use`, `exp`). Handlers extract `custom:tenant_id` and `custom:broker_id` strictly server-side, rejecting caller-supplied body parameters to prevent tenant traversal attacks.
 2. **Network & Perimeter Security**:
    - **Multi-Tier VPC** (`10.20.0.0/16`): Public subnets host only external ALBs; private application subnets host ECS Fargate tasks with zero public IPs; private database subnets host RDS and ClickHouse with zero internet routes.
-   - **Edge Acceleration & Origin Protection**: CloudFront terminates TLS 1.3 at global edge locations and injects a secret `X-Origin-Verify` header. The ALB drops any direct internet request that bypasses CloudFront.
-   - **AWS WAFv2 Defense-in-Depth**: 6 prioritized rules protect public ingress: IP rate-limiting for scrapers (>100 req/5m), broker upload rate-limiting (>50 req/5m on `/kyc`), AWS Managed CRS (OWASP Top 10), SQL injection rules, Known Bad Inputs (Log4j CVE-2021-44228), and Amazon IP Reputation List.
+   - **Edge Acceleration & Origin Protection**: CloudFront terminates TLS 1.3 at global edge locations and injects a secret `X-Origin-Verify` header. The ALB listener rules strictly enforce header presence, returning HTTP 403 Forbidden on direct requests that bypass CloudFront.
+   - **Public ACM Certificate with Route 53 DNS Validation**: ALB requests DNS validation on registered public domain names, backed by automated Route 53 validation records.
+   - **AWS WAFv2 Defense-in-Depth with Redacted Logging**: 6 prioritized rules protect public ingress (scrapers, KYC upload path, CRS, SQLi, Log4j, IP reputation) with centralized CloudWatch logging redacting `authorization` and `cookie` headers.
 3. **Data Protection & Cryptography**:
-   - **S3 Triple-Deny Data Perimeter**: Denies unencrypted transport (`aws:SecureTransport == false`), denies uploads without KMS encryption, and denies operations from outside the VPC Gateway Endpoint.
+   - **S3 Triple-Deny Data Perimeter & Task Role Allowlist**: Denies unencrypted transport (`aws:SecureTransport == false`), denies uploads without KMS encryption, and denies operations from outside the VPC Gateway Endpoint, while allowlisting deterministic ECS KYC and scanner task roles for external client presigned uploads.
+   - **Event-Driven Document Scanner**: S3 EventBridge notifications feed an encrypted SQS queue (with DLQ) polled by an ECS worker container enforcing object-key regex (`ALLOWED_KEY_PATTERN`), magic-bytes verification, EICAR pattern detection, S3 quarantine tagging, and SNS alerts.
    - **S3 Object Lock (`COMPLIANCE` Mode)**: Immutable WORM audit destination prevents log deletion or alteration by any principal, including root.
    - **Database Encryption**: Amazon RDS PostgreSQL 16 enforces KMS CMK storage encryption, dynamic credentials via AWS Secrets Manager, and transit encryption via `rds.force_ssl = "1"`.
    - **Host-Level Hardening**: ClickHouse EC2 lab enforces IMDSv2 (`http_tokens = "required"`, `http_put_response_hop_limit = 1`), encrypted EBS, zero SSH ingress (port 22 closed), and SSM Session Manager administration.
@@ -77,8 +80,8 @@ flowchart TD
 1. **100% Modular Infrastructure-as-Code**:
    - 13 reusable Terraform child modules + isolated bootstrap module with explicit variable contracts, standardized tagging, and remote state locking.
 2. **Shift-Left Quality & Security Gates**:
-   - 44 automated unit/integration tests running under pytest with Moto AWS mocks.
-   - 788 Checkov IaC checks passing with 0 failures and documented skips.
+   - 46 automated unit/integration tests running under pytest with Moto AWS mocks.
+   - 892 Checkov IaC checks passing with 0 failures and documented skips.
    - Automated SARIF security reporting directly into GitHub Security tab.
 3. **Documented Operational Incident Runbooks**:
    - [`RUNBOOK-01-Compromised-IAM-Credentials.md`](file:///Users/Yousef/pf-shield-cloud-security/docs/runbooks/RUNBOOK-01-Compromised-IAM-Credentials.md): IAM quarantine triage and credential rotation.

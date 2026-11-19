@@ -37,3 +37,11 @@ enable_glue_etl         = true
 # SOAR Configuration (Human-in-the-loop escalation + Protected Identities)
 containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin,lead-security-engineer"
+
+# Public Domain & Retention Settings (Production Baseline)
+public_domain_name      = "pf-shield.ae"
+route53_zone_id         = "Z0123456789EXAMPLE"
+container_image_tag     = "latest"
+log_retention_days      = 365
+enable_waf_logging      = true
+enable_alb_cognito_auth = true

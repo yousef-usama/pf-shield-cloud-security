@@ -26,3 +26,9 @@ variable "permission_boundary_arn" {
   description = "IAM Permission Boundary ARN for IAM roles created in networking"
   type        = string
 }
+
+variable "log_retention_days" {
+  description = "Retention period in days for VPC Flow Logs CloudWatch log group"
+  type        = number
+  default     = 7
+}

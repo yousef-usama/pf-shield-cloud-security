@@ -17,7 +17,7 @@ locals {
 resource "aws_iam_role" "config_role" {
   count                = var.enable_aws_config ? 1 : 0
   name                 = "pf-aws-config-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.config_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

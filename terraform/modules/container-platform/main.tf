@@ -128,7 +128,7 @@ resource "aws_ecs_cluster" "primary" {
 # ECS Task Execution Role (ECR Image Pull, KMS Decrypt, CloudWatch Logs)
 resource "aws_iam_role" "ecs_execution_role" {
   name                 = "pf-ecs-execution-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.ecs_execution_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -188,7 +188,7 @@ resource "aws_iam_role_policy" "ecs_execution_policy" {
 # Listings API Task Role (DynamoDB Read Only)
 resource "aws_iam_role" "listings_api_task_role" {
   name                 = "pf-listings-task-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.ecs_task_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -236,7 +236,7 @@ resource "aws_iam_role_policy" "listings_api_task_policy" {
 # Broker KYC API Task Role (S3 Presign & Initial DynamoDB Audit Insertion)
 resource "aws_iam_role" "broker_kyc_api_task_role" {
   name                 = "pf-broker-kyc-task-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.ecs_task_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -289,10 +289,10 @@ resource "aws_iam_role_policy" "broker_kyc_api_task_policy" {
   })
 }
 
-# Document Scan Worker Task Role (S3 Read/Tagging & DynamoDB Update)
+# Document Scan Worker Task Role (S3 Read/Tagging, SQS Polling, & DynamoDB Update)
 resource "aws_iam_role" "document_scan_worker_task_role" {
   name                 = "pf-scan-worker-task-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.ecs_task_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -351,33 +351,44 @@ resource "aws_iam_role_policy" "document_scan_worker_task_policy" {
           "sns:Publish"
         ]
         Resource = var.sns_topic_arn
+      },
+      {
+        Sid    = "SQSScanQueueConsumer"
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility"
+        ]
+        Resource = var.sqs_scan_queue_arn != "" ? var.sqs_scan_queue_arn : "*"
       }
     ]
   })
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 4. CLOUDWATCH LOG GROUPS (ENCRYPTED WITH KMS CMK, 7-DAY RETENTION)
+# 4. CLOUDWATCH LOG GROUPS (ENCRYPTED WITH KMS CMK, PARAMETERIZED RETENTION)
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_cloudwatch_log_group" "listings_api" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/ecs/pf-shield-listings-api-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
 }
 
 resource "aws_cloudwatch_log_group" "broker_kyc_api" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/ecs/pf-shield-broker-kyc-api-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
 }
 
 resource "aws_cloudwatch_log_group" "document_scan_worker" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/ecs/pf-shield-document-scan-worker-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
 }
 
@@ -450,23 +461,49 @@ resource "aws_lb_target_group" "broker_kyc_api" {
   }
 }
 
-# ACM Certificate for ALB HTTPS Listener
+# ACM Certificate for Public ALB HTTPS Listener (Public Domain + Route 53 DNS Validation)
 resource "aws_acm_certificate" "alb" {
-  domain_name       = "api.pf-shield.internal"
+  domain_name       = "api.${var.public_domain_name}"
   validation_method = "DNS"
 
   subject_alternative_names = [
-    "listings.pf-shield.internal",
-    "kyc.pf-shield.internal"
+    "listings.${var.public_domain_name}",
+    "kyc.${var.public_domain_name}"
   ]
 
   tags = {
-    Name = "pf-shield-alb-cert-${var.environment}"
+    Name        = "pf-shield-alb-cert-${var.environment}"
+    Environment = var.environment
+    Compliance  = "UAE-PDPL-TLS13"
   }
 
   lifecycle {
     create_before_destroy = true
   }
+}
+
+# Route 53 DNS Validation Records for Public ACM Certificate
+resource "aws_route53_record" "alb_cert_validation" {
+  for_each = var.route53_zone_id != "" ? {
+    for dvo in aws_acm_certificate.alb.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = var.route53_zone_id
+}
+
+resource "aws_acm_certificate_validation" "alb" {
+  count                   = var.route53_zone_id != "" ? 1 : 0
+  certificate_arn         = aws_acm_certificate.alb.arn
+  validation_record_fqdns = [for record in aws_route53_record.alb_cert_validation : record.fqdn]
 }
 
 # ALB HTTP Listener (Port 80) -> Strictly redirects to HTTPS 443 (CIS AWS Benchmark)
@@ -492,15 +529,15 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = aws_acm_certificate.alb.arn
+  certificate_arn   = var.route53_zone_id != "" ? aws_acm_certificate_validation.alb[0].certificate_arn : aws_acm_certificate.alb.arn
 
   default_action {
     type = "fixed-response"
 
     fixed_response {
       content_type = "application/json"
-      message_body = "{\"error\": \"Not Found: No matching API route\"}"
-      status_code  = "404"
+      message_body = "{\"error\": \"Forbidden: Direct access to load balancer origin is prohibited\"}"
+      status_code  = "403"
     }
   }
 }
@@ -520,20 +557,56 @@ resource "aws_lb_listener_rule" "listings_api" {
       values = ["/api/v1/properties*"]
     }
   }
+
+  dynamic "condition" {
+    for_each = var.enable_cloudfront ? [1] : []
+    content {
+      http_header {
+        http_header_name = "X-Origin-Verify"
+        values           = [random_password.origin_verify[0].result]
+      }
+    }
+  }
 }
 
 resource "aws_lb_listener_rule" "broker_kyc_api" {
   listener_arn = aws_lb_listener.https.arn
   priority     = 200
 
+  dynamic "action" {
+    for_each = var.enable_alb_cognito_auth && var.cognito_user_pool_arn != null ? [1] : []
+    content {
+      type  = "authenticate-cognito"
+      order = 1
+      authenticate_cognito {
+        user_pool_arn              = var.cognito_user_pool_arn
+        user_pool_client_id        = var.cognito_user_pool_client_id
+        user_pool_domain           = var.cognito_user_pool_domain
+        on_unauthenticated_request = "authenticate"
+        session_timeout            = 3600
+      }
+    }
+  }
+
   action {
     type             = "forward"
+    order            = var.enable_alb_cognito_auth && var.cognito_user_pool_arn != null ? 2 : 1
     target_group_arn = aws_lb_target_group.broker_kyc_api.arn
   }
 
   condition {
     path_pattern {
       values = ["/api/v1/kyc/*"]
+    }
+  }
+
+  dynamic "condition" {
+    for_each = var.enable_cloudfront ? [1] : []
+    content {
+      http_header {
+        http_header_name = "X-Origin-Verify"
+        values           = [random_password.origin_verify[0].result]
+      }
     }
   }
 }
@@ -661,7 +734,7 @@ resource "aws_ecs_task_definition" "listings_api" {
   container_definitions = jsonencode([
     {
       name                   = "listings-api"
-      image                  = "${aws_ecr_repository.listings_api.repository_url}:latest"
+      image                  = "${aws_ecr_repository.listings_api.repository_url}:${var.container_image_tag}"
       essential              = true
       readonlyRootFilesystem = true
       user                   = "10001:10001"
@@ -709,7 +782,7 @@ resource "aws_ecs_task_definition" "broker_kyc_api" {
   container_definitions = jsonencode([
     {
       name                   = "broker-kyc-api"
-      image                  = "${aws_ecr_repository.broker_kyc_api.repository_url}:latest"
+      image                  = "${aws_ecr_repository.broker_kyc_api.repository_url}:${var.container_image_tag}"
       essential              = true
       readonlyRootFilesystem = true
       user                   = "10001:10001"
@@ -759,7 +832,7 @@ resource "aws_ecs_task_definition" "document_scan_worker" {
   container_definitions = jsonencode([
     {
       name                   = "document-scan-worker"
-      image                  = "${aws_ecr_repository.document_scan_worker.repository_url}:latest"
+      image                  = "${aws_ecr_repository.document_scan_worker.repository_url}:${var.container_image_tag}"
       essential              = true
       readonlyRootFilesystem = true
       user                   = "10001:10001"
@@ -778,7 +851,8 @@ resource "aws_ecs_task_definition" "document_scan_worker" {
         { name = "ENVIRONMENT", value = var.environment },
         { name = "KYC_VAULT_BUCKET_NAME", value = var.kyc_vault_bucket_name },
         { name = "DYNAMODB_TABLE_NAME", value = var.dynamodb_table_name },
-        { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn }
+        { name = "SNS_TOPIC_ARN", value = var.sns_topic_arn },
+        { name = "SQS_SCAN_QUEUE_URL", value = var.sqs_scan_queue_url }
       ]
 
       logConfiguration = {

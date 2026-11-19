@@ -186,9 +186,9 @@ resource "aws_route_table_association" "private_db_b" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
-  #checkov:skip=CKV_AWS_338: 7-day retention eliminates idle CloudWatch storage costs on demo tier
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/aws/vpc-flow-logs/pf-shield-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
 }
 

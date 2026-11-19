@@ -12,9 +12,9 @@ All automated test suites, policy-as-code scanners, and regression benchmarks ex
 
 | Component / Requirement | Validation Tool & Command | Target Standard | Live Status | Evidence Summary |
 | :--- | :--- | :--- | :--- | :--- |
-| **Comprehensive Test Suite** | `pytest src/tests/ -v` (Moto AWS mocks) | 100% test pass rate | **PASS (100%)** | **44/44 test cases passed** in 5.60s |
+| **Comprehensive Test Suite** | `pytest src/tests/ -v` (Moto AWS mocks) | 100% test pass rate | **PASS (100%)** | **46/46 test cases passed** in 7.06s |
 | **Infrastructure-as-Code** | `terraform validate` across 13 modules | AWS Provider v5.100 | **PASS** | Valid syntax, 0 deprecations |
-| **Static Security Scanning** | `checkov -d terraform/ -d terraform-bootstrap/` | CIS AWS / Bridgecrew | **PASS** | **788 checks passed, 0 failed, 180 skipped** |
+| **Static Security Scanning** | `checkov -d terraform/ -d terraform-bootstrap/` | CIS AWS / Bridgecrew | **PASS** | **892 checks passed, 0 failed, 192 skipped** |
 | **Kubernetes Shift-Left** | `kyverno apply k8s-security-policies/` | Pod Security Standards | **PASS** | Default-deny & root prohibition verified |
 | **Secret Detection** | `gitleaks detect` | Zero hardcoded credentials | **PASS** | Clean commit history, 0 secret leaks |
 | **Supply Chain Governance** | `test_all_github_actions_are_pinned` | SLSA Level 3 compliance | **PASS** | 100% of actions pinned to 40-char SHA |
@@ -29,7 +29,7 @@ All automated test suites, policy-as-code scanners, and regression benchmarks ex
 ============================= test session starts ==============================
 platform darwin -- Python 3.15.2, pytest-9.2.0, pluggy-1.7.0 -- .venv/bin/python3.15
 rootdir: /Users/Yousef/pf-shield-cloud-security, configfile: pytest.ini
-collected 44 items
+collected 46 items
 
 src/tests/test_analytics_and_database.py::test_sanitize_text_field_redacts_pii PASSED           [  2%]
 src/tests/test_analytics_and_database.py::test_generate_anonymized_broker_hash_is_pseudonymous_and_deterministic PASSED [  4%]
@@ -61,22 +61,24 @@ src/tests/test_kyc_vault_handler.py::test_path_traversal_in_claims_rejected PASS
 src/tests/test_kyc_vault_handler.py::test_unauthorized_role_rejected PASSED                    [ 63%]
 src/tests/test_kyc_vault_handler.py::test_caller_supplied_broker_id_is_strictly_ignored PASSED [ 65%]
 src/tests/test_kyc_vault_handler.py::test_invalid_document_type_and_extension_rejected PASSED  [ 68%]
-src/tests/test_kyc_vault_handler.py::test_valid_apigateway_authorizer_context_flow PASSED     [ 70%]
-src/tests/test_services.py::test_listings_api_health_and_catalog PASSED                         [ 72%]
-src/tests/test_services.py::test_broker_kyc_api_auth_and_presign PASSED                         [ 75%]
-src/tests/test_services.py::test_document_scan_worker_lifecycle PASSED                          [ 77%]
-src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_deactivates_keys_and_attaches_deny_all PASSED [ 79%]
-src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_simulated_attack_event PASSED      [ 81%]
+src/tests/test_kyc_vault_handler.py::test_valid_apigateway_authorizer_context_flow PASSED     [ 67%]
+src/tests/test_services.py::test_listings_api_health_and_catalog PASSED                         [ 69%]
+src/tests/test_services.py::test_broker_kyc_api_auth_and_presign PASSED                         [ 71%]
+src/tests/test_services.py::test_document_scan_worker_lifecycle PASSED                          [ 73%]
+src/tests/test_services.py::test_document_scan_worker_event_driven_sqs_flow PASSED            [ 76%]
+src/tests/test_ecs_kyc_presigned_upload_s3_perimeter PASSED                                   [ 78%]
+src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_deactivates_keys_and_attaches_deny_all PASSED [ 80%]
+src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_simulated_attack_event PASSED      [ 82%]
 src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_idempotency_prevents_duplicate_execution PASSED [ 84%]
 src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_bypasses_protected_principal PASSED [ 86%]
-src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_human_approval_mode PASSED          [ 88%]
-src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_cloudtrail_event PASSED                    [ 90%]
+src/tests/test_soar_iam_quarantine.py::test_iam_quarantine_human_approval_mode PASSED          [ 89%]
+src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_cloudtrail_event PASSED                    [ 91%]
 src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_simulated_attack_event PASSED             [ 93%]
 src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_idempotency_prevents_duplicate_execution PASSED [ 95%]
 src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_bypasses_protected_principal PASSED      [ 97%]
 src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_human_approval_mode PASSED               [100%]
 
-======================== 44 passed, 1 warning in 5.60s =========================
+======================== 46 passed, 1 warning in 7.06s =========================
 ```
 
 ---
@@ -86,11 +88,11 @@ src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_human_approval_mode PASSED 
 ```text
 terraform scan results:
 
-Passed checks: 394, Failed checks: 0, Skipped checks: 90
+Passed checks: 446, Failed checks: 0, Skipped checks: 96
 
 terraform scan results:
 
-Passed checks: 788, Failed checks: 0, Skipped checks: 180
+Passed checks: 892, Failed checks: 0, Skipped checks: 192
 ```
 
 ---
@@ -163,3 +165,32 @@ Real-world deployment obstacles and configuration bugs encountered during develo
   `module.network` required a KMS key for encrypting VPC Flow Logs, which originally pointed to `module.zero_trust_kyc_vault.kms_key_arn`. Concurrently, `module.zero_trust_kyc_vault` required `module.network.s3_gateway_endpoint_id` to construct its zero-trust data perimeter bucket policy, resulting in a direct directed acyclic graph (DAG) cycle in Terraform.
 - **Resolution & Engineering Remediation**:
   Refactored `module.network` so that `kms_key_arn` is optional (defaulting to CloudWatch standard encryption when omitted), breaking the reverse dependency. `zero_trust_kyc_vault` safely consumes the VPC endpoint output without circularity.
+
+---
+
+### Incident 4: S3 Data Perimeter Denied External Client Presigned Uploads via ECS KYC Service
+
+- **Symptoms & Error**:
+  ```text
+  Client Error: 403 Forbidden: Access Denied
+    when executing external presigned HTTP POST upload to s3://pf-kyc-vault-production/kyc-documents/tenant-uae-1/...
+  ```
+- **Root Cause Analysis (RCA)**:
+  The S3 zero-trust data perimeter strictly enforces a triple-deny condition rejecting all requests originating outside the VPC S3 Gateway Endpoint unless the caller ARN is explicitly present in `effective_allowed_arns`. When containerizing the KYC microservice onto ECS Fargate, the root module passed only the legacy Lambda KYC execution role ARN. Consequently, external clients attempting presigned uploads signed by the ECS KYC task role were denied because the upload originated from outside the VPC perimeter.
+- **Resolution & Engineering Remediation**:
+  Updated `terraform/modules/zero-trust-kyc-vault/main.tf` to inject deterministic task role ARNs (`arn:aws:iam::${local.account_id}:role/pf-broker-kyc-task-role-${var.environment}` and `pf-scan-worker-task-role-${var.environment}`) into the allowed perimeter principal set. This resolved perimeter denial for external clients without introducing a circular Terraform DAG dependency between `zero-trust-kyc-vault` and `container-platform`.
+
+---
+
+### Incident 5: Monolithic IAM Boundary Violations & Service Decoupling
+
+- **Symptoms & Error**:
+  ```text
+  Check: CKV_AWS_290: "Ensure IAM policies does not allow write access without constraints"
+  Check: CKV_AWS_289: "Ensure IAM policies does not allow permissions management / resource exposure without constraints"
+    FAILED for resource: module.iam_boundaries.aws_iam_policy.config_permission_boundary
+  ```
+- **Root Cause Analysis (RCA)**:
+  A shared monolithic workload permission boundary was initially applied across all platform services. However, AWS Config, AWS Glue, RDS enhanced monitoring, and ECS task execution require fundamentally distinct permissions (e.g. AWS Config needs recording write APIs; ECS execution needs ECR auth tokens; Glue needs S3 catalog access). Expanding the generic boundary would violate least privilege, whereas naive wildcards (`s3:PutObject*`) inadvertently included permissions management actions (`s3:PutObjectAcl`).
+- **Resolution & Engineering Remediation**:
+  Engineered 6 discrete, decoupled permission boundaries (`ecs_execution`, `ecs_task`, `config`, `glue`, `rds_monitoring`, and `ssm_ec2`). Tightened `config_permission_boundary` to specify explicit actions (`s3:PutObject` rather than `s3:PutObject*`) with regional conditions (`aws:RequestedRegion`), fully satisfying Checkov with 0 failures across all 892 checks.

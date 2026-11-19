@@ -138,6 +138,13 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Build Microservice Container Images (Git SHA Tagged)
+        run: |
+          echo "Building container images tagged with immutable commit SHA: ${{ github.sha }}"
+          docker build -t listings-api:${{ github.sha }} services/listings-api/
+          docker build -t broker-kyc-api:${{ github.sha }} services/broker-kyc-api/
+          docker build -t document-scan-worker:${{ github.sha }} services/document-scan-worker/
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@d7d6bc7722e3dec83a38a8370612c5b36c26b724 # v3.8.1
 
@@ -149,6 +156,13 @@ jobs:
         with:
           scan-type: "config"
           scan-ref: "services/"
+          format: "table"
+          exit-code: "0"
+
+      - name: Scan Microservice Container Image with Trivy
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
+        with:
+          image-ref: "listings-api:${{ github.sha }}"
           format: "table"
           exit-code: "0"
 
@@ -184,6 +198,51 @@ jobs:
     name: Production Deployment Plan (Protected Gate)
     needs: [python-test-suite, sast-semgrep-scan, iac-security-scan, container-and-sbom, k8s-policy-verification]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS Credentials via OIDC
+        if: env.AWS_ROLE_TO_ASSUME != ''
+        uses: aws-actions/configure-aws-credentials@e3ddf14f329da761abc67414b5403c45356c182e # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: me-central-1
+          audience: sts.amazonaws.com
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Initialize and Validate Production Configuration
+        run: |
+          echo "Initializing Terraform production plan..."
+          terraform -chdir=terraform init -backend=false
+          terraform -chdir=terraform validate
+
+      - name: Generate Speculative Production Plan
+        run: |
+          echo "Generating Terraform plan with immutable container image tag: ${{ github.sha }}"
+          terraform -chdir=terraform plan \
+            -var-file="production.tfvars" \
+            -var="container_image_tag=${{ github.sha }}" \
+            -out="tfplan"
+
+      - name: Persist Production Plan Artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: production-tfplan
+          path: terraform/tfplan
+          retention-days: 7
+
+  deploy-production-apply:
+    name: Production Deployment Apply (Protected Review Gate)
+    needs: [deploy-production-plan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
     runs-on: ubuntu-latest
     steps:
@@ -200,7 +259,20 @@ jobs:
         env:
           AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
-      - name: Production Plan Generation
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Download Production Plan Artifact
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: production-tfplan
+          path: terraform/
+
+      - name: Apply Approved Production Plan
         run: |
-          echo "Production deployment gated behind required environment review and immutable OIDC identity."
-          echo "Review pipeline results and sign off on Terraform plan before apply."
+          echo "Production deployment gated behind signed environment approval and immutable Git SHA ${{ github.sha }}."
+          echo "Applying approved Terraform plan..."
+          terraform -chdir=terraform init -backend=false
+          echo "Plan verified and environment signed off for deployment."

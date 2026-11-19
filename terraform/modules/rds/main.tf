@@ -100,7 +100,7 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
 resource "aws_iam_role" "rds_monitoring" {
   count                = var.enable_rds && var.environment == "production" ? 1 : 0
   name                 = "pf-shield-rds-monitoring-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.rds_monitoring_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

@@ -6,7 +6,10 @@ locals {
   effective_allowed_arns = distinct(concat(
     [
       data.aws_caller_identity.current.arn,
-      "arn:aws:iam::${local.account_id}:root"
+      "arn:aws:iam::${local.account_id}:root",
+      "arn:aws:iam::${local.account_id}:role/pf-broker-kyc-task-role-${var.environment}",
+      "arn:aws:iam::${local.account_id}:role/pf-scan-worker-task-role-${var.environment}",
+      "arn:aws:iam::${local.account_id}:role/pf-kyc-vault-handler-role-${var.environment}"
     ],
     var.allowed_principal_arns
   ))
@@ -39,7 +42,9 @@ resource "aws_kms_key" "pf_kyc_cmk" {
         Principal = {
           Service = [
             "logs.${var.aws_region}.amazonaws.com",
-            "ssm.amazonaws.com"
+            "ssm.amazonaws.com",
+            "events.amazonaws.com",
+            "sqs.amazonaws.com"
           ]
         }
         Action = [
@@ -241,4 +246,134 @@ resource "aws_dynamodb_table" "properties_metadata" {
     DataClassification   = "Restricted-UAE-PDPL"
     ComplianceRegulation = "UAE-PDPL-ISO27001"
   }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# 4. EVENT-DRIVEN MALWARE SCAN PIPELINE (S3 -> EVENTBRIDGE -> SQS -> ECS WORKER)
+# ---------------------------------------------------------------------------------------------------------------------
+
+# 4.1 S3 Bucket EventBridge Notifications
+resource "aws_s3_bucket_notification" "kyc_vault_events" {
+  bucket      = aws_s3_bucket.kyc_vault.id
+  eventbridge = true
+}
+
+# 4.2 SQS Dead Letter Queue for Scan Failures
+resource "aws_sqs_queue" "document_scan_dlq" {
+  #checkov:skip=CKV_AWS_72: Dead Letter Queue does not require a secondary dead letter queue
+  name                      = "pf-shield-document-scan-dlq-${var.environment}"
+  kms_master_key_id         = aws_kms_key.pf_kyc_cmk.arn
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name        = "pf-shield-document-scan-dlq-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_sqs_queue_policy" "document_scan_dlq_policy" {
+  queue_url = aws_sqs_queue.document_scan_dlq.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnforceSecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "sqs:*"
+        Resource  = aws_sqs_queue.document_scan_dlq.arn
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# 4.3 SQS Queue for Asynchronous Document Scanning
+resource "aws_sqs_queue" "document_scan_queue" {
+  name                       = "pf-shield-document-scan-queue-${var.environment}"
+  kms_master_key_id          = aws_kms_key.pf_kyc_cmk.arn
+  visibility_timeout_seconds = 60
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.document_scan_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = {
+    Name        = "pf-shield-document-scan-queue-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_sqs_queue_policy" "document_scan_queue_policy" {
+  queue_url = aws_sqs_queue.document_scan_queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowEventBridgeSendMessage"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.document_scan_queue.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_cloudwatch_event_rule.kyc_upload_scanner.arn
+          }
+        }
+      },
+      {
+        Sid       = "EnforceSecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "sqs:*"
+        Resource  = aws_sqs_queue.document_scan_queue.arn
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# 4.4 EventBridge Rule Matching S3 KYC Uploads
+resource "aws_cloudwatch_event_rule" "kyc_upload_scanner" {
+  name        = "pf-shield-kyc-upload-scanner-${var.environment}"
+  description = "Captures S3 KYC Vault ObjectCreated events and enqueues to SQS for malware worker processing"
+
+  event_pattern = jsonencode({
+    source      = ["aws.s3"]
+    detail-type = ["Object Created"]
+    detail = {
+      bucket = {
+        name = [aws_s3_bucket.kyc_vault.id]
+      }
+      object = {
+        key = [{
+          prefix = "kyc-documents/"
+        }]
+      }
+    }
+  })
+
+  tags = {
+    Name        = "pf-shield-kyc-upload-scanner-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_cloudwatch_event_target" "kyc_upload_scanner_sqs" {
+  rule      = aws_cloudwatch_event_rule.kyc_upload_scanner.name
+  target_id = "DocumentScanSQSTarget"
+  arn       = aws_sqs_queue.document_scan_queue.arn
 }

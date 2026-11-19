@@ -20,3 +20,9 @@ variable "advanced_security_mode" {
   type        = string
   default     = "AUDIT"
 }
+
+variable "public_domain_name" {
+  description = "Public domain name for ALB OAuth callback URLs"
+  type        = string
+  default     = "pf-shield.demo"
+}

@@ -36,6 +36,18 @@ variable "enable_waf" {
   default     = false
 }
 
+variable "enable_waf_logging" {
+  description = "Toggle to enable AWS WAFv2 logging to CloudWatch Logs (active in production)"
+  type        = bool
+  default     = false
+}
+
+variable "log_retention_days" {
+  description = "Retention period in days for CloudWatch log groups"
+  type        = number
+  default     = 7
+}
+
 variable "user_pool_endpoint" {
   description = "Cognito User Pool endpoint for JWT validation"
   type        = string

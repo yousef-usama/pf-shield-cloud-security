@@ -40,6 +40,78 @@ variable "permission_boundary_arn" {
   type        = string
 }
 
+variable "ecs_execution_permission_boundary_arn" {
+  description = "Dedicated IAM Permission Boundary ARN for ECS execution role"
+  type        = string
+  default     = null
+}
+
+variable "ecs_task_permission_boundary_arn" {
+  description = "Dedicated IAM Permission Boundary ARN for ECS container task roles"
+  type        = string
+  default     = null
+}
+
+variable "public_domain_name" {
+  description = "Registered public domain name for public ALB and CloudFront"
+  type        = string
+  default     = "pf-shield.demo"
+}
+
+variable "route53_zone_id" {
+  description = "Route 53 Hosted Zone ID for public domain DNS validation records"
+  type        = string
+  default     = ""
+}
+
+variable "container_image_tag" {
+  description = "Immutable container image tag (Git commit SHA) for ECS task definitions"
+  type        = string
+  default     = "latest"
+}
+
+variable "log_retention_days" {
+  description = "Retention period in days for CloudWatch log groups"
+  type        = number
+  default     = 7
+}
+
+variable "sqs_scan_queue_arn" {
+  description = "SQS queue ARN for asynchronous document scanner worker events"
+  type        = string
+  default     = ""
+}
+
+variable "sqs_scan_queue_url" {
+  description = "SQS queue URL for asynchronous document scanner worker events"
+  type        = string
+  default     = ""
+}
+
+variable "enable_alb_cognito_auth" {
+  description = "Enable ALB authenticate-cognito action before routing to broker KYC service"
+  type        = bool
+  default     = false
+}
+
+variable "cognito_user_pool_arn" {
+  description = "Cognito User Pool ARN for ALB authenticate-cognito"
+  type        = string
+  default     = null
+}
+
+variable "cognito_user_pool_client_id" {
+  description = "Cognito User Pool Client ID for ALB authenticate-cognito"
+  type        = string
+  default     = null
+}
+
+variable "cognito_user_pool_domain" {
+  description = "Cognito User Pool Domain prefix for ALB authenticate-cognito"
+  type        = string
+  default     = null
+}
+
 variable "kms_key_arn" {
   description = "KMS Customer Managed Key ARN for ECR and CloudWatch logs encryption"
   type        = string

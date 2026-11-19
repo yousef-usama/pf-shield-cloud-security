@@ -174,7 +174,7 @@ resource "aws_security_group" "clickhouse" {
 
 resource "aws_iam_role" "clickhouse" {
   name                 = "pf-shield-clickhouse-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.ssm_ec2_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -332,7 +332,7 @@ resource "aws_glue_security_configuration" "main" {
 
 resource "aws_iam_role" "glue_role" {
   name                 = "pf-shield-glue-sanitizer-role-${var.environment}"
-  permissions_boundary = var.permission_boundary_arn
+  permissions_boundary = coalesce(var.glue_permission_boundary_arn, var.permission_boundary_arn)
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

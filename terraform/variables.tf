@@ -130,4 +130,40 @@ variable "enable_cloudfront" {
   default     = false
 }
 
+variable "public_domain_name" {
+  description = "Registered public domain name for public ALB and CloudFront"
+  type        = string
+  default     = "pf-shield.demo"
+}
+
+variable "route53_zone_id" {
+  description = "Route 53 Hosted Zone ID for public domain DNS validation records"
+  type        = string
+  default     = ""
+}
+
+variable "container_image_tag" {
+  description = "Immutable container image tag (Git commit SHA) for ECS task definitions"
+  type        = string
+  default     = "latest"
+}
+
+variable "log_retention_days" {
+  description = "Retention period in days for CloudWatch log groups (7 in demo, 365 in production)"
+  type        = number
+  default     = 7
+}
+
+variable "enable_waf_logging" {
+  description = "FinOps toggle to enable AWS WAFv2 logging to CloudWatch Logs"
+  type        = bool
+  default     = false
+}
+
+variable "enable_alb_cognito_auth" {
+  description = "Enable ALB authenticate-cognito action before routing to broker KYC service"
+  type        = bool
+  default     = false
+}
+
 

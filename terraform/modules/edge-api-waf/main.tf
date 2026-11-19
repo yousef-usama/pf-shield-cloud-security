@@ -77,9 +77,9 @@ resource "aws_iam_role_policy" "property_api_permissions" {
 }
 
 resource "aws_cloudwatch_log_group" "property_api_logs" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/aws/lambda/pf-property-api-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
 }
 
@@ -192,9 +192,9 @@ resource "aws_iam_role_policy" "kyc_vault_permissions" {
 }
 
 resource "aws_cloudwatch_log_group" "kyc_vault_logs" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/aws/lambda/pf-kyc-vault-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
 }
 
@@ -252,9 +252,9 @@ resource "aws_apigatewayv2_api" "edge_api" {
 }
 
 resource "aws_cloudwatch_log_group" "api_access_logs" {
-  #checkov:skip=CKV_AWS_338: FinOps strict requirement: 7-day retention eliminates idle CloudWatch storage costs
+  #checkov:skip=CKV_AWS_338: Parameterized retention (7 days demo, 365 days production)
   name              = "/aws/apigateway/pf-shield-edge-api-${var.environment}"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
 }
 
@@ -528,4 +528,38 @@ resource "aws_wafv2_web_acl_association" "edge_waf_association" {
   count        = var.enable_waf ? 1 : 0
   resource_arn = aws_apigatewayv2_stage.default.arn
   web_acl_arn  = aws_wafv2_web_acl.edge_waf[0].arn
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# 6. WAF LOGGING CONFIGURATION (ACTIVE IN PRODUCTION / ENABLE_WAF_LOGGING)
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_group" "waf_logs" {
+  count             = var.enable_waf && (var.enable_waf_logging || var.environment == "production") ? 1 : 0
+  name              = "aws-waf-logs-pf-shield-${var.environment}"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = var.kms_key_arn
+
+  tags = {
+    Name        = "aws-waf-logs-pf-shield-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "edge_waf_logging" {
+  count                   = var.enable_waf && (var.enable_waf_logging || var.environment == "production") ? 1 : 0
+  log_destination_configs = [aws_cloudwatch_log_group.waf_logs[0].arn]
+  resource_arn            = aws_wafv2_web_acl.edge_waf[0].arn
+
+  redacted_fields {
+    single_header {
+      name = "authorization"
+    }
+  }
+
+  redacted_fields {
+    single_header {
+      name = "cookie"
+    }
+  }
 }

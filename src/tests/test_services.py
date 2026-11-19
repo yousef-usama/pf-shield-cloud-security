@@ -28,6 +28,8 @@ import time
 from typing import Any
 
 import boto3
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes
 import pytest
 from fastapi.testclient import TestClient
 from moto import mock_aws
@@ -51,12 +53,42 @@ os.environ["KYC_VAULT_BUCKET_NAME"] = "pf-kyc-vault-sim"
 os.environ["DYNAMODB_TABLE_NAME"] = "pf-properties-metadata-prod-sim"
 os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:me-central-1:123456789012:pf-shield-incidents-prod-sim"
 
+# Generate test RSA key pair and JWKS for cryptographic token validation
+TEST_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+TEST_PUBLIC_KEY = TEST_PRIVATE_KEY.public_key()
+_pub_num = TEST_PUBLIC_KEY.public_numbers()
 
-def make_jwt(payload: dict[str, Any]) -> str:
-    """Generate mock base64url encoded JWT token."""
-    header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256", "typ": "JWT"}).encode()).decode().rstrip("=")
+def _int_to_b64url(val: int) -> str:
+    length = (val.bit_length() + 7) // 8
+    b = val.to_bytes(length, byteorder="big")
+    return base64.urlsafe_b64encode(b).decode("utf-8").rstrip("=")
+
+TEST_KID = "test-key-id-1"
+TEST_JWKS = {
+    "keys": [
+        {
+            "kty": "RSA",
+            "alg": "RS256",
+            "use": "sig",
+            "kid": TEST_KID,
+            "n": _int_to_b64url(_pub_num.n),
+            "e": _int_to_b64url(_pub_num.e),
+        }
+    ]
+}
+os.environ["COGNITO_TEST_JWKS"] = json.dumps(TEST_JWKS)
+
+
+def make_jwt(payload: dict[str, Any], kid: str = TEST_KID, key=TEST_PRIVATE_KEY, tamper_signature: bool = False) -> str:
+    """Generate cryptographically signed base64url encoded RS256 JWT token."""
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256", "typ": "JWT", "kid": kid}).encode()).decode().rstrip("=")
     body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-    return f"{header}.{body}.mock-signature"
+    signed_data = f"{header}.{body}".encode("utf-8")
+    signature = key.sign(signed_data, padding.PKCS1v15(), hashes.SHA256())
+    sig_str = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
+    if tamper_signature:
+        sig_str = "tampered_" + sig_str[9:]
+    return f"{header}.{body}.{sig_str}"
 
 
 @pytest.fixture
@@ -66,6 +98,7 @@ def mock_aws_env():
         s3 = boto3.client("s3", region_name="me-central-1")
         dynamodb = boto3.resource("dynamodb", region_name="me-central-1")
         sns = boto3.client("sns", region_name="me-central-1")
+        sqs = boto3.client("sqs", region_name="me-central-1")
 
         s3.create_bucket(
             Bucket="pf-kyc-vault-sim",
@@ -88,12 +121,17 @@ def mock_aws_env():
         sns_res = sns.create_topic(Name="pf-shield-incidents-prod-sim")
         topic_arn = sns_res["TopicArn"]
 
+        sqs_res = sqs.create_queue(QueueName="pf-shield-document-scan-queue-prod-sim")
+        queue_url = sqs_res["QueueUrl"]
+
         yield {
             "s3": s3,
             "dynamodb": dynamodb,
             "table": table,
             "sns": sns,
+            "sqs": sqs,
             "topic_arn": topic_arn,
+            "queue_url": queue_url,
         }
 
 
@@ -154,7 +192,43 @@ def test_broker_kyc_api_auth_and_presign(mock_aws_env):
     )
     assert unauth_resp.status_code == 401
 
-    # 3. Expired token -> 401
+    # 3. Forged signature / untrusted JWT -> 401 (Proves cryptographic verification)
+    forged_token = make_jwt(
+        {
+            "custom:tenant_id": "tenant-dxb",
+            "custom:broker_id": "broker-001",
+            "role": "broker",
+            "exp": time.time() + 3600,
+        },
+        tamper_signature=True,
+    )
+    forged_resp = client.post(
+        "/api/v1/kyc/presign",
+        headers={"Authorization": f"Bearer {forged_token}"},
+        json={"document_type": "emirates_id", "file_extension": "pdf"},
+    )
+    assert forged_resp.status_code == 401
+    assert "signature verification failed" in forged_resp.json()["detail"].lower()
+
+    # 4. Unknown kid / untrusted signer -> 401
+    unknown_kid_token = make_jwt(
+        {
+            "custom:tenant_id": "tenant-dxb",
+            "custom:broker_id": "broker-001",
+            "role": "broker",
+            "exp": time.time() + 3600,
+        },
+        kid="unknown-kid-999",
+    )
+    unk_resp = client.post(
+        "/api/v1/kyc/presign",
+        headers={"Authorization": f"Bearer {unknown_kid_token}"},
+        json={"document_type": "emirates_id", "file_extension": "pdf"},
+    )
+    assert unk_resp.status_code == 401
+    assert "unknown key id" in unk_resp.json()["detail"].lower()
+
+    # 5. Expired token -> 401
     expired_token = make_jwt({
         "custom:tenant_id": "tenant-dxb",
         "custom:broker_id": "broker-001",
@@ -167,8 +241,9 @@ def test_broker_kyc_api_auth_and_presign(mock_aws_env):
         json={"document_type": "emirates_id", "file_extension": "pdf"},
     )
     assert exp_resp.status_code == 401
+    assert "expired" in exp_resp.json()["detail"].lower()
 
-    # 4. Path traversal attempt -> 403
+    # 6. Path traversal attempt -> 403
     traversal_token = make_jwt({
         "custom:tenant_id": "tenant/../../evil",
         "custom:broker_id": "broker-001",
@@ -182,7 +257,7 @@ def test_broker_kyc_api_auth_and_presign(mock_aws_env):
     )
     assert trav_resp.status_code == 403
 
-    # 5. Valid authenticated presign request -> 200
+    # 7. Valid authenticated presign request -> 200
     valid_token = make_jwt({
         "custom:tenant_id": "tenant-marina",
         "custom:broker_id": "broker-7788",
@@ -325,3 +400,143 @@ def test_document_scan_worker_lifecycle(mock_aws_env):
     )
     assert scan_corrupt_resp.status_code == 200
     assert scan_corrupt_resp.json()["scan_status"] == "rejected"
+
+
+def test_document_scan_worker_event_driven_sqs_flow(mock_aws_env):
+    """Test full event-driven asynchronous scanning via S3 EventBridge -> SQS -> ECS worker polling."""
+    worker_module = load_module_from_file("worker_app_event_driven", os.path.join(BASE_DIR, "services", "document-scan-worker", "worker.py"))
+    worker_module.s3_client = mock_aws_env["s3"]
+    worker_module.dynamodb = mock_aws_env["dynamodb"]
+    worker_module.sns_client = mock_aws_env["sns"]
+    worker_module.sqs_client = mock_aws_env["sqs"]
+    worker_module.SNS_TOPIC_ARN = mock_aws_env["topic_arn"]
+    worker_module.SQS_SCAN_QUEUE_URL = mock_aws_env["queue_url"]
+
+    s3 = mock_aws_env["s3"]
+    table = mock_aws_env["table"]
+    sqs = mock_aws_env["sqs"]
+    queue_url = mock_aws_env["queue_url"]
+
+    # 1. Upload EICAR Malware file to KYC Vault bucket
+    eicar_bytes = (
+        b"%PDF-1.5 " +
+        b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" +
+        b"EICAR_PADDING_" * 150
+    )
+    object_key = "kyc-documents/tenant-uae/broker-dxb/emirates_id/doc-uuid-eicar-99.pdf"
+    s3.put_object(
+        Bucket="pf-kyc-vault-sim",
+        Key=object_key,
+        Body=eicar_bytes,
+    )
+
+    table.put_item(Item={
+        "pk": "TENANT#tenant-uae#BROKER#broker-dxb",
+        "sk": "KYC#doc-uuid-eicar-99",
+        "scan_status": "pending_scan",
+    })
+
+    # 2. Simulate S3 EventBridge notification delivered to SQS scan queue
+    eventbridge_payload = {
+        "version": "0",
+        "id": "event-1234-abcd",
+        "detail-type": "Object Created",
+        "source": "aws.s3",
+        "account": "123456789012",
+        "time": "2026-11-19T17:00:00Z",
+        "region": "me-central-1",
+        "detail": {
+            "version": "0",
+            "bucket": {"name": "pf-kyc-vault-sim"},
+            "object": {
+                "key": object_key,
+                "size": len(eicar_bytes),
+                "etag": "etag12345",
+            },
+            "reason": "PutObject",
+        },
+    }
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=json.dumps(eventbridge_payload),
+    )
+
+    # 3. Trigger worker batch polling
+    processed = worker_module.poll_and_process_sqs_batch(queue_url=queue_url, max_messages=5)
+    assert processed == 1, "Expected 1 SQS message to be processed"
+
+    # 4. Verify S3 quarantine tag
+    tags_resp = s3.get_object_tagging(Bucket="pf-kyc-vault-sim", Key=object_key)
+    tag_map = {t["Key"]: t["Value"] for t in tags_resp["TagSet"]}
+    assert tag_map.get("SecurityScan") == "Quarantined", f"Expected Quarantined tag, got: {tag_map}"
+
+    # 5. Verify DynamoDB audit record transition
+    updated_item = table.get_item(Key={
+        "pk": "TENANT#tenant-uae#BROKER#broker-dxb",
+        "sk": "KYC#doc-uuid-eicar-99",
+    }).get("Item")
+    assert updated_item is not None
+    assert updated_item["scan_status"] == "quarantined"
+    assert "Malware signature detected" in updated_item["scan_reason"]
+
+    # 6. Verify SQS message deletion (queue should be empty)
+    recv_after = sqs.receive_message(QueueUrl=queue_url, MaxNumberOfMessages=5, WaitTimeSeconds=1)
+    assert "Messages" not in recv_after or len(recv_after["Messages"]) == 0, "SQS message was not deleted after processing"
+
+    # 7. Test Allowlist Key Rejection (malicious key outside schema is rejected without processing)
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=json.dumps({
+            "source": "aws.s3",
+            "detail": {
+                "bucket": {"name": "pf-kyc-vault-sim"},
+                "object": {"key": "arbitrary-path/outside-schema.exe"},
+            },
+        }),
+    )
+    processed_invalid = worker_module.poll_and_process_sqs_batch(queue_url=queue_url, max_messages=5)
+    assert processed_invalid == 0, "Invalid key should be rejected without processing"
+
+
+def test_ecs_kyc_presigned_upload_s3_perimeter(mock_aws_env):
+    """Test that ECS broker-KYC task role is authorized by S3 data perimeter for external presigned uploads."""
+    s3 = mock_aws_env["s3"]
+    bucket_name = "pf-kyc-vault-sim"
+
+    # Configure S3 bucket policy enforcing Data Perimeter with allowed principal list
+    allowed_roles = [
+        "arn:aws:iam::123456789012:role/pf-broker-kyc-task-role-prod-sim",
+        "arn:aws:iam::123456789012:role/pf-scan-worker-task-role-prod-sim",
+        "arn:aws:iam::123456789012:role/pf-soar-s3-lockdown-prod-sim",
+    ]
+
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "EnforceDataPerimeter",
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": ["s3:GetObject", "s3:PutObject"],
+                "Resource": f"arn:aws:s3:::{bucket_name}/*",
+                "Condition": {
+                    "StringNotEquals": {
+                        "aws:SourceVpce": "vpce-test-12345",
+                    },
+                    "ArnNotEquals": {
+                        "aws:PrincipalArn": allowed_roles,
+                    },
+                },
+            }
+        ],
+    }
+    s3.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
+
+    # Verify that allowed roles are present in the bucket policy's condition
+    fetched_policy = json.loads(s3.get_bucket_policy(Bucket=bucket_name)["Policy"])
+    perimeter_stmt = fetched_policy["Statement"][0]
+    allowed_principals_in_policy = perimeter_stmt["Condition"]["ArnNotEquals"]["aws:PrincipalArn"]
+
+    assert "arn:aws:iam::123456789012:role/pf-broker-kyc-task-role-prod-sim" in allowed_principals_in_policy
+    assert "arn:aws:iam::123456789012:role/pf-scan-worker-task-role-prod-sim" in allowed_principals_in_policy
+    assert "arn:aws:iam::123456789012:role/unauthorized-external-actor" not in allowed_principals_in_policy

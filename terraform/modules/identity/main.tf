@@ -103,3 +103,21 @@ resource "aws_cognito_user_group" "compliance_officers" {
   description  = "Internal Compliance and Verification Officers"
   precedence   = 10
 }
+
+resource "aws_cognito_user_pool_domain" "broker_domain" {
+  domain       = "pf-shield-auth-${var.environment}"
+  user_pool_id = aws_cognito_user_pool.broker_pool.id
+}
+
+resource "aws_cognito_user_pool_client" "alb_client" {
+  name            = "pf-shield-alb-client-${var.environment}"
+  user_pool_id    = aws_cognito_user_pool.broker_pool.id
+  generate_secret = true
+
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["email", "openid", "phone"]
+  callback_urls                        = ["https://api.${var.public_domain_name}/oauth2/idpresponse"]
+
+  prevent_user_existence_errors = "ENABLED"
+}
