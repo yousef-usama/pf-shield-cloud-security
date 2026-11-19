@@ -20,17 +20,17 @@ output "alb_dns_name" {
 
 output "ecr_listings_api_repository_url" {
   description = "ECR repository URL for listings-api"
-  value       = data.aws_ecr_repository.listings_api.repository_url
+  value       = local.listings_api_repo_url
 }
 
 output "ecr_broker_kyc_api_repository_url" {
   description = "ECR repository URL for broker-kyc-api"
-  value       = data.aws_ecr_repository.broker_kyc_api.repository_url
+  value       = local.broker_kyc_api_repo_url
 }
 
 output "ecr_document_scan_worker_repository_url" {
   description = "ECR repository URL for document-scan-worker"
-  value       = data.aws_ecr_repository.document_scan_worker.repository_url
+  value       = local.document_scan_worker_repo_url
 }
 
 output "listings_api_service_name" {

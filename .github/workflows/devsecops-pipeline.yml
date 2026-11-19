@@ -162,19 +162,17 @@ jobs:
         env:
           AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
-      - name: Ensure Foundational ECR Repositories Exist
+      - name: Validate Foundational ECR Repositories Exist
         if: env.AWS_ROLE_TO_ASSUME != ''
         run: |
-          echo "Ensuring foundational ECR repositories exist before pushing images..."
+          echo "Verifying foundational ECR repositories provisioned by terraform-bootstrap exist..."
           for repo in pf-shield/listings-api-production pf-shield/broker-kyc-api-production pf-shield/document-scan-worker-production; do
-            aws ecr describe-repositories --repository-names "$repo" --region me-central-1 >/dev/null 2>&1 || \
-            aws ecr create-repository \
-              --repository-name "$repo" \
-              --region me-central-1 \
-              --image-tag-mutability IMMUTABLE \
-              --image-scanning-configuration scanOnPush=true \
-              --encryption-configuration encryptionType=KMS
+            if ! aws ecr describe-repositories --repository-names "$repo" --region me-central-1 >/dev/null 2>&1; then
+              echo "ERROR: Foundational ECR repository '$repo' not found. Provision bootstrap foundation first via terraform-bootstrap/."
+              exit 1
+            fi
           done
+          echo "All foundational ECR repositories confirmed."
         env:
           AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
@@ -221,15 +219,32 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@d7d6bc7722e3dec83a38a8370612c5b36c26b724 # v3.8.1
 
-      - name: Verify Cosign & Sign Pushed Image Digests
+      - name: Sign & Cryptographically Verify Pushed Image Digests
         run: |
           cosign version
           source image-digests.env
-          echo "Signing all 3 container image digests with Cosign keyless signing..."
           if [ -n "${{ secrets.AWS_ROLE_TO_ASSUME }}" ]; then
+            echo "Signing all 3 container image digests with Cosign keyless signing..."
             cosign sign --yes "${LISTINGS_DIGEST}"
             cosign sign --yes "${BROKER_KYC_DIGEST}"
             cosign sign --yes "${SCAN_WORKER_DIGEST}"
+
+            echo "Verifying Cosign cryptographic signatures across all 3 image digests..."
+            cosign verify \
+              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${LISTINGS_DIGEST}"
+            cosign verify \
+              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${BROKER_KYC_DIGEST}"
+            cosign verify \
+              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${SCAN_WORKER_DIGEST}"
+            echo "All 3 container image signatures successfully verified."
+          else
+            echo "Running in local simulation mode (zero credentials); Cosign signing and verification skipped."
           fi
         env:
           AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -293,20 +308,27 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Verify Production Deployment Credentials
+        run: |
+          if [ -z "${{ secrets.AWS_ROLE_TO_ASSUME }}" ]; then
+            echo "ERROR: AWS_ROLE_TO_ASSUME secret is required for production deployment workflows. Local mock fallbacks are strictly prohibited."
+            exit 1
+          fi
+
       - name: Configure AWS Credentials via OIDC
-        if: env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@e3ddf14f329da761abc67414b5403c45356c182e # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: me-central-1
           audience: sts.amazonaws.com
-        env:
-          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.9.0"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7d6bc7722e3dec83a38a8370612c5b36c26b724 # v3.8.1
 
       - name: Download Container Image Digests Artifact
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
@@ -314,35 +336,57 @@ jobs:
           name: container-image-digests
           path: ./
 
+      - name: Verify Container Image Cosign Signatures Before Plan
+        run: |
+          if [ ! -f image-digests.env ]; then
+            echo "ERROR: image-digests.env artifact missing. Container build and signing stage must precede production plan."
+            exit 1
+          fi
+          source image-digests.env
+          if [ -z "$LISTINGS_DIGEST" ] || [ -z "$BROKER_KYC_DIGEST" ] || [ -z "$SCAN_WORKER_DIGEST" ]; then
+            echo "ERROR: Missing one or more required container image digests in image-digests.env"
+            exit 1
+          fi
+          echo "Verifying Cosign cryptographic signatures across all 3 container image digests before plan..."
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${LISTINGS_DIGEST}"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${BROKER_KYC_DIGEST}"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${SCAN_WORKER_DIGEST}"
+          echo "All 3 microservice container digests verified successfully."
+
       - name: Initialize and Validate Production Configuration
         run: |
           echo "Initializing Terraform production plan configuration..."
-          if [ -n "${{ secrets.AWS_ROLE_TO_ASSUME }}" ]; then
-            ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-            STATE_BUCKET="${{ secrets.TF_STATE_BUCKET }}"
-            if [ -z "$STATE_BUCKET" ]; then
-              STATE_BUCKET="pf-shield-tfstate-${ACCOUNT_ID}"
-            fi
-            echo "Initializing Terraform with remote S3 backend in bucket: ${STATE_BUCKET}"
-            terraform -chdir=terraform init \
-              -backend-config="bucket=${STATE_BUCKET}" \
-              -backend-config="dynamodb_table=pf-shield-tf-locks" \
-              -backend-config="region=me-central-1"
-          else
-            echo "Running in local simulation mode (zero credentials); using local backend initialization."
-            terraform -chdir=terraform init -backend=false
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          STATE_BUCKET="${{ secrets.TF_STATE_BUCKET }}"
+          if [ -z "$STATE_BUCKET" ]; then
+            STATE_BUCKET="pf-shield-tfstate-${ACCOUNT_ID}"
           fi
+          echo "Verifying remote state bucket '${STATE_BUCKET}' exists..."
+          if ! aws s3api head-bucket --bucket "${STATE_BUCKET}" 2>/dev/null; then
+            echo "ERROR: State bucket '${STATE_BUCKET}' does not exist or is inaccessible. Production deployment requires an active bootstrapped S3 state bucket."
+            exit 1
+          fi
+          echo "Initializing Terraform with remote S3 backend in bucket: ${STATE_BUCKET} (key: pf-shield/production/terraform.tfstate)"
+          terraform -chdir=terraform init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=pf-shield/production/terraform.tfstate" \
+            -backend-config="dynamodb_table=pf-shield-tf-locks" \
+            -backend-config="region=me-central-1"
           terraform -chdir=terraform validate
-        env:
-          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
       - name: Generate Speculative Production Plan
         run: |
-          source image-digests.env 2>/dev/null || true
-          LISTINGS_DIGEST="${LISTINGS_DIGEST:-123456789012.dkr.ecr.me-central-1.amazonaws.com/pf-shield/listings-api-production@sha256:ba837841108226011a68ba9b0a6245084988f01b3d7b4202a4d339185a73e670}"
-          BROKER_KYC_DIGEST="${BROKER_KYC_DIGEST:-123456789012.dkr.ecr.me-central-1.amazonaws.com/pf-shield/broker-kyc-api-production@sha256:d123456789012345678901234567890123456789012345678901234567890123}"
-          SCAN_WORKER_DIGEST="${SCAN_WORKER_DIGEST:-123456789012.dkr.ecr.me-central-1.amazonaws.com/pf-shield/document-scan-worker-production@sha256:e123456789012345678901234567890123456789012345678901234567890123}"
-          echo "Generating Terraform plan with distinct immutable digests for all 3 microservices:"
+          source image-digests.env
+          echo "Generating Terraform plan with verified immutable digests for all 3 microservices:"
           echo "  listings_api:         ${LISTINGS_DIGEST}"
           echo "  broker_kyc_api:       ${BROKER_KYC_DIGEST}"
           echo "  document_scan_worker: ${SCAN_WORKER_DIGEST}"
@@ -368,15 +412,19 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Verify Production Deployment Credentials
+        run: |
+          if [ -z "${{ secrets.AWS_ROLE_TO_ASSUME }}" ]; then
+            echo "ERROR: AWS_ROLE_TO_ASSUME secret is required for production deployment apply. Local mock fallbacks are strictly prohibited."
+            exit 1
+          fi
+
       - name: Configure AWS Credentials via OIDC
-        if: env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@e3ddf14f329da761abc67414b5403c45356c182e # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: me-central-1
           audience: sts.amazonaws.com
-        env:
-          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
@@ -389,24 +437,25 @@ jobs:
           name: production-tfplan
           path: terraform/
 
-      - name: Apply Approved Production Plan
+      - name: Initialize Remote Backend and Apply Approved Production Plan
         run: |
           echo "Production deployment gated behind signed environment approval and immutable digests."
-          if [ -n "${{ secrets.AWS_ROLE_TO_ASSUME }}" ]; then
-            ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-            STATE_BUCKET="${{ secrets.TF_STATE_BUCKET }}"
-            if [ -z "$STATE_BUCKET" ]; then
-              STATE_BUCKET="pf-shield-tfstate-${ACCOUNT_ID}"
-            fi
-            echo "Initializing Terraform with remote S3 backend in bucket: ${STATE_BUCKET}"
-            terraform -chdir=terraform init \
-              -backend-config="bucket=${STATE_BUCKET}" \
-              -backend-config="dynamodb_table=pf-shield-tf-locks" \
-              -backend-config="region=me-central-1"
-          else
-            echo "Running in local simulation mode (zero credentials); using local backend initialization."
-            terraform -chdir=terraform init -backend=false
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          STATE_BUCKET="${{ secrets.TF_STATE_BUCKET }}"
+          if [ -z "$STATE_BUCKET" ]; then
+            STATE_BUCKET="pf-shield-tfstate-${ACCOUNT_ID}"
           fi
+          echo "Verifying remote state bucket '${STATE_BUCKET}' exists..."
+          if ! aws s3api head-bucket --bucket "${STATE_BUCKET}" 2>/dev/null; then
+            echo "ERROR: State bucket '${STATE_BUCKET}' does not exist or is inaccessible. Production deployment requires an active bootstrapped S3 state bucket."
+            exit 1
+          fi
+          echo "Initializing Terraform with remote S3 backend in bucket: ${STATE_BUCKET} (key: pf-shield/production/terraform.tfstate)"
+          terraform -chdir=terraform init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=pf-shield/production/terraform.tfstate" \
+            -backend-config="dynamodb_table=pf-shield-tf-locks" \
+            -backend-config="region=me-central-1"
           echo "Applying approved Terraform plan..."
           terraform -chdir=terraform apply -auto-approve tfplan
         env:

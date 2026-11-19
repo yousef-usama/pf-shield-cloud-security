@@ -148,12 +148,30 @@ def test_ci_cd_ecr_naming_cosign_and_remote_backend_invariants():
     assert "SCAN_WORKER_DIGEST=" in content
     assert "container_image_digests" in content
 
-    # 3. Verify Cosign signing does not mask failures
+    # 3. Verify Cosign signing does not mask failures and cosign verify is enforced across all 3 digests
     assert 'cosign sign --yes "${LISTINGS_DIGEST}"' in content
     assert 'cosign sign --yes "${BROKER_KYC_DIGEST}"' in content
     assert 'cosign sign --yes "${SCAN_WORKER_DIGEST}"' in content
     assert 'cosign sign --yes "${LISTINGS_DIGEST}" || echo' not in content, "Cosign failure must not be masked with || echo"
 
+    assert 'cosign verify \\\n            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \\\n            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n            "${LISTINGS_DIGEST}"' in content
+    assert 'cosign verify \\\n            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \\\n            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n            "${BROKER_KYC_DIGEST}"' in content
+    assert 'cosign verify \\\n            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \\\n            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n            "${SCAN_WORKER_DIGEST}"' in content
+
     # 4. Verify remote backend initialization for production workflows
     assert '-backend-config="bucket=${STATE_BUCKET}"' in content, "Production workflow must supply remote backend state bucket"
+    assert '-backend-config="key=pf-shield/production/terraform.tfstate"' in content, "Production workflow must supply production state key override"
     assert '-backend-config="dynamodb_table=pf-shield-tf-locks"' in content, "Production workflow must supply DynamoDB state lock table"
+
+    # 5. Verify no imperative ECR creation in CI workflow (bootstrap is sole owner)
+    assert "aws ecr create-repository" not in content, "CI workflow must not imperatively create ECR repositories; terraform-bootstrap owns ECR creation"
+
+    # 6. Verify fail-fast semantics in production plan and apply jobs (no fallback to -backend=false or simulated runs)
+    assert "deploy-production-plan:" in content
+    assert "deploy-production-apply:" in content
+    plan_job = content.split("deploy-production-plan:")[1].split("deploy-production-apply:")[0]
+    apply_job = content.split("deploy-production-apply:")[1]
+    assert "-backend=false" not in plan_job, "Production plan job must not fall back to local backend"
+    assert "-backend=false" not in apply_job, "Production apply job must not fall back to local backend"
+    assert "AWS_ROLE_TO_ASSUME secret is required" in plan_job, "Production plan job must fail fast on missing OIDC credentials"
+    assert "AWS_ROLE_TO_ASSUME secret is required" in apply_job, "Production apply job must fail fast on missing OIDC credentials"

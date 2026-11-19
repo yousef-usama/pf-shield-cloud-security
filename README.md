@@ -154,7 +154,7 @@ All security claims, architectural invariants, and containment SLAs in PF-Shield
   - [`terraform/modules/finops-budget/`](terraform/modules/finops-budget/): AWS Budgets configuration capping spend at $5.00/mo with proactive alerting.
   - [`terraform/modules/network/`](terraform/modules/network/): Multi-tier VPC (`10.20.0.0/16`), public ALB subnets, private app subnets, private database subnets, VPC Flow Logs, and Route 53 private hosted zone.
   - [`terraform/modules/zero-trust-kyc-vault/`](terraform/modules/zero-trust-kyc-vault/): S3 KYC document vault, KMS CMK envelope encryption, and DynamoDB property metadata table.
-  - [`terraform/modules/container-platform/`](terraform/modules/container-platform/): Amazon ECS on Fargate, ECR immutable repositories with KMS encryption, ALB with TLS 1.3, and autoscaling policies.
+  - [`terraform/modules/container-platform/`](terraform/modules/container-platform/): Amazon ECS on Fargate, consuming foundational ECR immutable repositories provisioned in bootstrap, ALB with TLS 1.3, and autoscaling policies.
   - [`terraform/modules/edge-api-waf/`](terraform/modules/edge-api-waf/): API Gateway HTTP API, Graviton2 Lambda functions, and anti-scraping WAFv2 rules.
   - [`terraform/modules/soar-engine/`](terraform/modules/soar-engine/): Multi-region CloudTrail, EventBridge rules, SQS DLQs, DynamoDB deduplication table (`pf-soar-idempotency`), and auto-remediation Lambdas.
   - [`terraform/modules/observability/`](terraform/modules/observability/): CloudWatch Security Operations dashboard and proactive DLQ/error alarms.

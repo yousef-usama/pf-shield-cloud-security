@@ -123,6 +123,7 @@ module "container_platform" {
   enable_cloudfront                     = var.enable_cloudfront
   public_domain_name                    = var.public_domain_name
   route53_zone_id                       = var.route53_zone_id
+  ecr_repository_urls                   = var.ecr_repository_urls
   container_image_tag                   = var.container_image_tag
   container_image_digests               = var.container_image_digests
   log_retention_days                    = var.log_retention_days

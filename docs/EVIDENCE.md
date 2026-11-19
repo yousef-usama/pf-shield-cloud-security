@@ -251,3 +251,23 @@ Real-world deployment obstacles and configuration bugs encountered during develo
   2. *Independent Multi-Service Digests*: Configured CI to push to `pf-shield/...` and capture independent immutable digests for each microservice (`LISTINGS_DIGEST`, `BROKER_KYC_DIGEST`, `SCAN_WORKER_DIGEST`) into `image-digests.env`. Added `container_image_digests` map variable in Terraform and routed each digest directly to its corresponding ECS task definition with individual production preconditions.
   3. *Strict Cosign Enforcement*: Signed all three container digests with Cosign keyless signing, eliminating masking (`|| echo`) so that signing failures fail the pipeline.
   4. *Encrypted Remote State & Locking in CI*: Updated production CI plan and apply jobs to dynamically initialize the remote backend using `-backend-config="bucket=${STATE_BUCKET}"` and `-backend-config="dynamodb_table=pf-shield-tf-locks"` when AWS credentials are present.
+
+### Incident 9: ECR Dual-Ownership Conflict, Remote State Path Isolation & End-to-End Cosign Verification
+
+- **Symptoms & Error**:
+  ```text
+  1. RepositoryAlreadyExistsException: The repository with name 'pf-shield/listings-api-production' already exists in the registry
+  2. Production State Key Drift: production deploys mutating pf-shield/prod-sim/terraform.tfstate rather than isolated production state
+  3. Silent Production Fallback: missing AWS_ROLE_TO_ASSUME falling back to ephemeral local state and simulated mock digests in production gate
+  4. Unverified Image Deployments: container images signed with Cosign but deployed without cryptographic signature verification
+  ```
+- **Root Cause Analysis (RCA)**:
+  1. *Dual ECR Ownership*: Both `terraform-bootstrap/` and `terraform/modules/container-platform/` declared `aws_ecr_repository` resources for the same repository names. Because two separate Terraform states cannot manage the same cloud resources, executing `terraform apply` in the main configuration failed with `RepositoryAlreadyExistsException`.
+  2. *State Key Collision*: `terraform/backend.tf` statically defined `key = "pf-shield/prod-sim/terraform.tfstate"`. Without an explicit `-backend-config="key=..."` override during CI production plan and apply, production runs targeted the simulation state path, risking catastrophic state overwrites.
+  3. *Insecure Production Fallbacks*: Production plan and apply jobs tolerated absent credentials by running `terraform init -backend=false` and exporting fallback placeholder digests. Production workflows must fail-fast rather than silently executing simulated runs.
+  4. *Missing Signature Verification Gate*: Images were signed with Cosign in CI, but no step cryptographically verified the signature attestations against the GitHub Actions OIDC identity before deploying the images to ECS.
+- **Resolution & Engineering Remediation**:
+  1. *Consolidated ECR Ownership*: Designate `terraform-bootstrap/` as the sole owner of all foundational ECR repositories and lifecycle policies. Completely removed ECR resource and data source blocks from `container-platform/main.tf`, passing repository URLs through `var.ecr_repository_urls` with deterministic fallback. Removed imperative repository creation from CI in favor of validation.
+  2. *Isolated Production State Key*: Configured both `deploy-production-plan` and `deploy-production-apply` jobs to pass `-backend-config="key=pf-shield/production/terraform.tfstate"`, guaranteeing strict state separation between simulation and production.
+  3. *Fail-Fast Production Pipeline*: Eliminated all fallback branches (`-backend=false` or mock digests) from production jobs. Both plan and apply fail immediately with `exit 1` if `AWS_ROLE_TO_ASSUME` or the remote state bucket is absent or inaccessible.
+  4. *Two-Phase Cosign Cryptographic Verification*: Added `cosign verify` across all three microservice digests (`LISTINGS_DIGEST`, `BROKER_KYC_DIGEST`, `SCAN_WORKER_DIGEST`) validating against `--certificate-identity-regexp` and `--certificate-oidc-issuer` immediately after signing in `container-and-sbom` and again as a hard gate prior to plan generation in `deploy-production-plan`.

@@ -7,25 +7,19 @@ data "aws_caller_identity" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
-}
 
-# ---------------------------------------------------------------------------------------------------------------------
-# 1. ECR REPOSITORIES (BOOTSTRAPPED FOUNDATION)
-# ---------------------------------------------------------------------------------------------------------------------
-# Foundational ECR repositories and lifecycle pruning are provisioned in terraform-bootstrap to resolve
-# the chicken-and-egg deployment ordering, allowing CI/CD to build, push, scan, and sign images before
-# speculative Terraform production planning and deployment apply.
+  # Foundational ECR repository URLs provisioned by terraform-bootstrap (or constructed deterministically)
+  listings_api_repo_url = var.ecr_repository_urls.listings_api != "" ? (
+    var.ecr_repository_urls.listings_api
+  ) : "${local.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/pf-shield/listings-api-${var.environment}"
 
-data "aws_ecr_repository" "listings_api" {
-  name = "pf-shield/listings-api-${var.environment}"
-}
+  broker_kyc_api_repo_url = var.ecr_repository_urls.broker_kyc_api != "" ? (
+    var.ecr_repository_urls.broker_kyc_api
+  ) : "${local.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/pf-shield/broker-kyc-api-${var.environment}"
 
-data "aws_ecr_repository" "broker_kyc_api" {
-  name = "pf-shield/broker-kyc-api-${var.environment}"
-}
-
-data "aws_ecr_repository" "document_scan_worker" {
-  name = "pf-shield/document-scan-worker-${var.environment}"
+  document_scan_worker_repo_url = var.ecr_repository_urls.document_scan_worker != "" ? (
+    var.ecr_repository_urls.document_scan_worker
+  ) : "${local.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/pf-shield/document-scan-worker-${var.environment}"
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -736,9 +730,9 @@ locals {
     var.container_image_digests.listings_api
     ) : (
     strcontains(var.container_image_tag, "@sha256:") ? (
-      strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${data.aws_ecr_repository.listings_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+      strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${local.listings_api_repo_url}@${split("@", var.container_image_tag)[1]}"
       ) : (
-      strcontains(var.container_image_tag, "sha256:") ? "${data.aws_ecr_repository.listings_api.repository_url}@${var.container_image_tag}" : "${data.aws_ecr_repository.listings_api.repository_url}:${var.container_image_tag}"
+      strcontains(var.container_image_tag, "sha256:") ? "${local.listings_api_repo_url}@${var.container_image_tag}" : "${local.listings_api_repo_url}:${var.container_image_tag}"
     )
   )
 
@@ -746,9 +740,9 @@ locals {
     var.container_image_digests.broker_kyc_api
     ) : (
     strcontains(var.container_image_tag, "@sha256:") ? (
-      strcontains(var.container_image_tag, "/") ? replace(var.container_image_tag, "listings-api", "broker-kyc-api") : "${data.aws_ecr_repository.broker_kyc_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+      strcontains(var.container_image_tag, "/") ? replace(var.container_image_tag, "listings-api", "broker-kyc-api") : "${local.broker_kyc_api_repo_url}@${split("@", var.container_image_tag)[1]}"
       ) : (
-      strcontains(var.container_image_tag, "sha256:") ? "${data.aws_ecr_repository.broker_kyc_api.repository_url}@${var.container_image_tag}" : "${data.aws_ecr_repository.broker_kyc_api.repository_url}:${var.container_image_tag}"
+      strcontains(var.container_image_tag, "sha256:") ? "${local.broker_kyc_api_repo_url}@${var.container_image_tag}" : "${local.broker_kyc_api_repo_url}:${var.container_image_tag}"
     )
   )
 
@@ -756,9 +750,9 @@ locals {
     var.container_image_digests.document_scan_worker
     ) : (
     strcontains(var.container_image_tag, "@sha256:") ? (
-      strcontains(var.container_image_tag, "/") ? replace(var.container_image_tag, "listings-api", "document-scan-worker") : "${data.aws_ecr_repository.document_scan_worker.repository_url}@${split("@", var.container_image_tag)[1]}"
+      strcontains(var.container_image_tag, "/") ? replace(var.container_image_tag, "listings-api", "document-scan-worker") : "${local.document_scan_worker_repo_url}@${split("@", var.container_image_tag)[1]}"
       ) : (
-      strcontains(var.container_image_tag, "sha256:") ? "${data.aws_ecr_repository.document_scan_worker.repository_url}@${var.container_image_tag}" : "${data.aws_ecr_repository.document_scan_worker.repository_url}:${var.container_image_tag}"
+      strcontains(var.container_image_tag, "sha256:") ? "${local.document_scan_worker_repo_url}@${var.container_image_tag}" : "${local.document_scan_worker_repo_url}:${var.container_image_tag}"
     )
   )
 }
