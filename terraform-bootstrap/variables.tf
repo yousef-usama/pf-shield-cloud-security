@@ -10,6 +10,18 @@ variable "github_repository" {
   default     = "YousefOsama/pf-shield-cloud-security"
 }
 
+variable "github_branch" {
+  description = "Protected primary GitHub branch allowed to assume the OIDC deployment role"
+  type        = string
+  default     = "main"
+}
+
+variable "github_environment" {
+  description = "Protected GitHub environment allowed to assume the production OIDC deployment role"
+  type        = string
+  default     = "production"
+}
+
 variable "role_name" {
   description = "Name of the bootstrap IAM role assumed by GitHub Actions"
   type        = string

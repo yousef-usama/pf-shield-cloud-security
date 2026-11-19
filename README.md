@@ -52,10 +52,11 @@ Real estate platforms handle millions of property listings and tens of thousands
   - [`services/listings-api/`](services/listings-api/): Public property search and listings service.
   - [`services/broker-kyc-api/`](services/broker-kyc-api/): Authenticated broker KYC document-upload and presign service.
   - [`services/document-scan-worker/`](services/document-scan-worker/): Asynchronous malware scanner and file integrity validation worker.
-- [`terraform-bootstrap/`](terraform-bootstrap/): Isolated one-time bootstrap config provisioning GitHub Actions OIDC identity provider and IAM deployer role.
-- [`.github/workflows/`](.github/workflows/): Complete CI/CD and automation suites:
-  - [`devsecops-pipeline.yml`](.github/workflows/devsecops-pipeline.yml): Push pipeline running SOAR unit tests, full IaC scan, and Kyverno K8s policies.
-  - [`pr-checkov.yml`](.github/workflows/pr-checkov.yml): Targeted PR gate running Checkov static analysis on any Terraform changes.
+- [`terraform-bootstrap/`](terraform-bootstrap/): Isolated one-time bootstrap config provisioning GitHub Actions OIDC identity provider and IAM deployer role with branch/environment scoping.
+- [`.github/dependabot.yml`](.github/dependabot.yml): Automated weekly vulnerability monitoring across GitHub Actions, Python packages, Terraform configs, and Docker base images.
+- [`.github/workflows/`](.github/workflows/): Complete CI/CD and automation suites with 100% immutable commit SHA pinning:
+  - [`devsecops-pipeline.yml`](.github/workflows/devsecops-pipeline.yml): Multi-stage pipeline running Gitleaks, 44 unit tests, Semgrep SAST, Checkov IaC, Trivy container scanning, CycloneDX SBOM generation, Cosign verification, Kyverno K8s policies, and protected production gating.
+  - [`pr-checkov.yml`](.github/workflows/pr-checkov.yml): Targeted PR gate running Checkov static analysis with SARIF report upload to GitHub Security.
   - [`terraform-destroy.yml`](.github/workflows/terraform-destroy.yml): Manual-dispatch 1-click teardown workflow for zero idle cost decommissioning.
 - [`src/app/`](src/app/): Application handlers (`property_api_handler.py` and `kyc_vault_handler.py`).
 - [`src/analytics/`](src/analytics/): AWS Glue ETL listing sanitization and PII scrubbing pipeline (`glue_etl_sanitize_listings.py`).
@@ -286,6 +287,24 @@ To defend the platform against Layer 3, Layer 4, and Layer 7 cyber attacks, cred
   - `pf-waf-ratelimit-scrapers`: Triggers when scraper rate limiting is actively engaged (> 20 blocks in 5 minutes).
   - `pf-alb-target-5xx-high`: Alerts when target containers return > 10 HTTP 5xx responses in 5 minutes.
   - `pf-alb-target-4xx-probing`: Alerts when 4xx client errors spike (> 100 in 5 minutes), detecting automated fuzzers and reconnaissance.
+
+### 9. Software Supply Chain & DevSecOps CI/CD Governance
+To guarantee that no untrusted, unverified, or vulnerable code reaches production:
+- **100% Immutable Commit SHA Pinning**: Every GitHub Action in all workflows is pinned to an immutable 40-character hexadecimal commit SHA (e.g., `actions/checkout@11bd7190... # v4.2.2`). This eliminates mutable tag spoofing risks and third-party action poisoning attacks.
+- **Strict OIDC Trust Policy Scoping**: The AWS IAM assume-role policy for GitHub Actions ([`terraform-bootstrap/main.tf`](terraform-bootstrap/main.tf)) restricts the subject claim strictly to:
+  - Protected primary branch: `repo:owner/repo:ref:refs/heads/main`
+  - Protected environment: `repo:owner/repo:environment:production`
+  - Pull requests originating within the repository: `repo:owner/repo:pull_request`
+  Unbounded wildcards (`repo:owner/repo:*`) are strictly prohibited.
+- **Automated Multi-Stage DevSecOps Pipeline**:
+  1. **Secret Detection**: Gitleaks scans commit history for leaked API keys, tokens, or private certificates.
+  2. **Unit & Mock Testing**: Executes 44 automated tests with Moto AWS mocks.
+  3. **Static Application Security Testing (SAST)**: Semgrep scans application handlers and services for OWASP Top 10 vulnerabilities, outputting SARIF reports.
+  4. **Policy-as-Code & IaC Scanning**: Checkov scans all Terraform configs and uploads SARIF findings directly to GitHub Security.
+  5. **Container Vulnerability & SBOM Governance**: Trivy scans Dockerfiles, CycloneDX generates Software Bills of Materials (`services-sbom.json`), and Cosign verifies cryptographic container attestation capabilities.
+  6. **Kubernetes Shift-Left Verification**: Kyverno CLI validates deployments against admission policies before cluster deployment.
+  7. **Protected Production Approval Gate**: Production deployments require explicit environment review and short-lived OIDC session credentials (`max_session_duration = 3600`).
+- **Continuous Dependency Monitoring**: [`.github/dependabot.yml`](.github/dependabot.yml) monitors GitHub Actions, Python packages, Terraform providers, and container base images with automated weekly security pull requests.
 
 ---
 

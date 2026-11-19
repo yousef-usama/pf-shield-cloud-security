@@ -1,0 +1,99 @@
+# =====================================================================================================================
+# PF-SHIELD: DEPENDABOT AUTOMATED VULNERABILITY & SUPPLY CHAIN GOVERNANCE
+# Configures weekly automated security updates and dependency version bumping across:
+# GitHub Actions, Python dependencies, Terraform modules/providers, and container base images.
+# =====================================================================================================================
+
+version: 2
+updates:
+  # 1. GitHub Actions Workflows (Automated Commit SHA & Version Monitoring)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 5
+    labels:
+      - "security"
+      - "dependencies"
+      - "github-actions"
+
+  # 2. Python Test & Application Dependencies
+  - package-ecosystem: "pip"
+    directory: "/src/tests"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 5
+    labels:
+      - "security"
+      - "python"
+
+  # 3. Primary Terraform Infrastructure Configurations
+  - package-ecosystem: "terraform"
+    directory: "/terraform"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 5
+    labels:
+      - "security"
+      - "terraform"
+
+  # 4. Bootstrap OIDC Terraform Configuration
+  - package-ecosystem: "terraform"
+    directory: "/terraform-bootstrap"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 3
+    labels:
+      - "security"
+      - "bootstrap"
+
+  # 5. Microservice Docker Base Images (Listings API)
+  - package-ecosystem: "docker"
+    directory: "/services/listings-api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 3
+    labels:
+      - "security"
+      - "container"
+
+  # 6. Microservice Docker Base Images (Broker KYC API)
+  - package-ecosystem: "docker"
+    directory: "/services/broker-kyc-api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 3
+    labels:
+      - "security"
+      - "container"
+
+  # 7. Microservice Docker Base Images (Document Scan Worker)
+  - package-ecosystem: "docker"
+    directory: "/services/document-scan-worker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Dubai"
+    open-pull-requests-limit: 3
+    labels:
+      - "security"
+      - "container"
