@@ -153,6 +153,20 @@ variable "container_image_tag" {
   }
 }
 
+variable "container_image_digests" {
+  description = "Map of immutable container image references/digests per microservice (listings_api, broker_kyc_api, document_scan_worker)"
+  type = object({
+    listings_api         = string
+    broker_kyc_api       = string
+    document_scan_worker = string
+  })
+  default = {
+    listings_api         = ""
+    broker_kyc_api       = ""
+    document_scan_worker = ""
+  }
+}
+
 variable "log_retention_days" {
   description = "Retention period in days for CloudWatch log groups (7 in demo, 365 in production)"
   type        = number

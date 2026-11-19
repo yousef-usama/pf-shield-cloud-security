@@ -10,96 +10,22 @@ locals {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 1. ECR REPOSITORIES (IMMUTABLE, KMS ENCRYPTED, VULNERABILITY SCANNING ON PUSH)
+# 1. ECR REPOSITORIES (BOOTSTRAPPED FOUNDATION)
 # ---------------------------------------------------------------------------------------------------------------------
+# Foundational ECR repositories and lifecycle pruning are provisioned in terraform-bootstrap to resolve
+# the chicken-and-egg deployment ordering, allowing CI/CD to build, push, scan, and sign images before
+# speculative Terraform production planning and deployment apply.
 
-resource "aws_ecr_repository" "listings_api" {
-  name                 = "pf-shield/listings-api-${var.environment}"
-  image_tag_mutability = "IMMUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  encryption_configuration {
-    encryption_type = "KMS"
-    kms_key         = var.kms_key_arn
-  }
-
-  tags = {
-    Name        = "pf-shield-ecr-listings-api-${var.environment}"
-    Compliance  = "CIS-AWS-Benchmark-ECR"
-    Environment = var.environment
-  }
+data "aws_ecr_repository" "listings_api" {
+  name = "pf-shield/listings-api-${var.environment}"
 }
 
-resource "aws_ecr_repository" "broker_kyc_api" {
-  name                 = "pf-shield/broker-kyc-api-${var.environment}"
-  image_tag_mutability = "IMMUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  encryption_configuration {
-    encryption_type = "KMS"
-    kms_key         = var.kms_key_arn
-  }
-
-  tags = {
-    Name        = "pf-shield-ecr-broker-kyc-api-${var.environment}"
-    Compliance  = "CIS-AWS-Benchmark-ECR"
-    Environment = var.environment
-  }
+data "aws_ecr_repository" "broker_kyc_api" {
+  name = "pf-shield/broker-kyc-api-${var.environment}"
 }
 
-resource "aws_ecr_repository" "document_scan_worker" {
-  name                 = "pf-shield/document-scan-worker-${var.environment}"
-  image_tag_mutability = "IMMUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  encryption_configuration {
-    encryption_type = "KMS"
-    kms_key         = var.kms_key_arn
-  }
-
-  tags = {
-    Name        = "pf-shield-ecr-document-scan-worker-${var.environment}"
-    Compliance  = "CIS-AWS-Benchmark-ECR"
-    Environment = var.environment
-  }
-}
-
-# Prune untagged or stale images after 7 days to eliminate idle storage costs
-resource "aws_ecr_lifecycle_policy" "prune_policy" {
-  for_each = {
-    listings_api         = aws_ecr_repository.listings_api.name
-    broker_kyc_api       = aws_ecr_repository.broker_kyc_api.name
-    document_scan_worker = aws_ecr_repository.document_scan_worker.name
-  }
-
-  repository = each.value
-
-  policy = jsonencode({
-    rules = [
-      {
-        rulePriority = 1
-        description  = "Expire untagged images older than 7 days"
-        selection = {
-          tagStatus   = "untagged"
-          countType   = "sinceImagePushed"
-          countUnit   = "days"
-          countNumber = 7
-        }
-        action = {
-          type = "expire"
-        }
-      }
-    ]
-  })
+data "aws_ecr_repository" "document_scan_worker" {
+  name = "pf-shield/document-scan-worker-${var.environment}"
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -805,23 +731,35 @@ resource "aws_cloudfront_distribution" "alb" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 locals {
-  # Construct immutable image references (supporting repository@sha256:..., sha256:..., or immutable tags)
-  listings_api_image = strcontains(var.container_image_tag, "@sha256:") ? (
-    strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${aws_ecr_repository.listings_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+  # Construct immutable image references for each microservice independently
+  listings_api_image = var.container_image_digests.listings_api != "" ? (
+    var.container_image_digests.listings_api
     ) : (
-    strcontains(var.container_image_tag, "sha256:") ? "${aws_ecr_repository.listings_api.repository_url}@${var.container_image_tag}" : "${aws_ecr_repository.listings_api.repository_url}:${var.container_image_tag}"
+    strcontains(var.container_image_tag, "@sha256:") ? (
+      strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${data.aws_ecr_repository.listings_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+      ) : (
+      strcontains(var.container_image_tag, "sha256:") ? "${data.aws_ecr_repository.listings_api.repository_url}@${var.container_image_tag}" : "${data.aws_ecr_repository.listings_api.repository_url}:${var.container_image_tag}"
+    )
   )
 
-  broker_kyc_api_image = strcontains(var.container_image_tag, "@sha256:") ? (
-    strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${aws_ecr_repository.broker_kyc_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+  broker_kyc_api_image = var.container_image_digests.broker_kyc_api != "" ? (
+    var.container_image_digests.broker_kyc_api
     ) : (
-    strcontains(var.container_image_tag, "sha256:") ? "${aws_ecr_repository.broker_kyc_api.repository_url}@${var.container_image_tag}" : "${aws_ecr_repository.broker_kyc_api.repository_url}:${var.container_image_tag}"
+    strcontains(var.container_image_tag, "@sha256:") ? (
+      strcontains(var.container_image_tag, "/") ? replace(var.container_image_tag, "listings-api", "broker-kyc-api") : "${data.aws_ecr_repository.broker_kyc_api.repository_url}@${split("@", var.container_image_tag)[1]}"
+      ) : (
+      strcontains(var.container_image_tag, "sha256:") ? "${data.aws_ecr_repository.broker_kyc_api.repository_url}@${var.container_image_tag}" : "${data.aws_ecr_repository.broker_kyc_api.repository_url}:${var.container_image_tag}"
+    )
   )
 
-  document_scan_worker_image = strcontains(var.container_image_tag, "@sha256:") ? (
-    strcontains(var.container_image_tag, "/") ? var.container_image_tag : "${aws_ecr_repository.document_scan_worker.repository_url}@${split("@", var.container_image_tag)[1]}"
+  document_scan_worker_image = var.container_image_digests.document_scan_worker != "" ? (
+    var.container_image_digests.document_scan_worker
     ) : (
-    strcontains(var.container_image_tag, "sha256:") ? "${aws_ecr_repository.document_scan_worker.repository_url}@${var.container_image_tag}" : "${aws_ecr_repository.document_scan_worker.repository_url}:${var.container_image_tag}"
+    strcontains(var.container_image_tag, "@sha256:") ? (
+      strcontains(var.container_image_tag, "/") ? replace(var.container_image_tag, "listings-api", "document-scan-worker") : "${data.aws_ecr_repository.document_scan_worker.repository_url}@${split("@", var.container_image_tag)[1]}"
+      ) : (
+      strcontains(var.container_image_tag, "sha256:") ? "${data.aws_ecr_repository.document_scan_worker.repository_url}@${var.container_image_tag}" : "${data.aws_ecr_repository.document_scan_worker.repository_url}:${var.container_image_tag}"
+    )
   )
 }
 
@@ -870,8 +808,8 @@ resource "aws_ecs_task_definition" "listings_api" {
 
   lifecycle {
     precondition {
-      condition     = var.environment != "production" || (var.container_image_tag != "latest" && can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", var.container_image_tag)))
-      error_message = "Production deployment requires an immutable container image digest (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
+      condition     = var.environment != "production" || can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", local.listings_api_image))
+      error_message = "Production deployment requires an immutable container image digest for listings-api (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
     }
   }
 
@@ -927,8 +865,8 @@ resource "aws_ecs_task_definition" "broker_kyc_api" {
 
   lifecycle {
     precondition {
-      condition     = var.environment != "production" || (var.container_image_tag != "latest" && can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", var.container_image_tag)))
-      error_message = "Production deployment requires an immutable container image digest (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
+      condition     = var.environment != "production" || can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", local.listings_api_image))
+      error_message = "Production deployment requires an immutable container image digest for listings-api (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
     }
   }
 
@@ -985,8 +923,8 @@ resource "aws_ecs_task_definition" "document_scan_worker" {
 
   lifecycle {
     precondition {
-      condition     = var.environment != "production" || (var.container_image_tag != "latest" && can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", var.container_image_tag)))
-      error_message = "Production deployment requires an immutable container image digest (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
+      condition     = var.environment != "production" || can(regex("(@sha256:[a-f0-9]{64}$|^sha256:[a-f0-9]{64}$)", local.listings_api_image))
+      error_message = "Production deployment requires an immutable container image digest for listings-api (e.g. repository@sha256:...); 'latest' or untracked tags are strictly prohibited."
     }
   }
 

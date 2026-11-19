@@ -124,6 +124,7 @@ module "container_platform" {
   public_domain_name                    = var.public_domain_name
   route53_zone_id                       = var.route53_zone_id
   container_image_tag                   = var.container_image_tag
+  container_image_digests               = var.container_image_digests
   log_retention_days                    = var.log_retention_days
   sqs_scan_queue_arn                    = module.zero_trust_kyc_vault.sqs_scan_queue_arn
   sqs_scan_queue_url                    = module.zero_trust_kyc_vault.sqs_scan_queue_url

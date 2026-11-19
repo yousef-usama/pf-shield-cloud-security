@@ -16,7 +16,7 @@ flowchart TD
         direction TB
         P1["1. Cost Optimization (FinOps)<br/>• VPC Gateway Endpoints ($0.00/hr)<br/>• S3 Bucket Keys (99% KMS request cut)<br/>• Scale-to-Zero Serverless & Fargate<br/>• Dual Profiles: demo.tfvars vs production.tfvars"]
         P2["2. Security (Zero-Trust Control Plane)<br/>• Cognito RS256 JWKS & Decoupled Boundaries<br/>• Multi-Tier VPC (Zero Public Database Routes)<br/>• S3 Triple-Deny & Object Lock COMPLIANCE<br/>• Automated SOAR in < 1.5s & Supply Chain SHA Pinning"]
-        P3["3. Operational Excellence<br/>• 14 Modular IaC Components + Isolated Bootstrap<br/>• 46 Automated Unit/Integration Tests (Moto)<br/>• 900 Checkov IaC Checks (0 Failures)<br/>• 3 Production Incident Runbooks & Forensics"]
+        P3["3. Operational Excellence<br/>• 14 Modular IaC Components + Isolated Bootstrap<br/>• 47 Automated Unit/Integration Tests (Moto)<br/>• 882 Checkov IaC Checks (0 Failures)<br/>• 3 Production Incident Runbooks & Forensics"]
         P4["4. Reliability & Disaster Recovery<br/>• Multi-AZ Serverless & Container Placement<br/>• SQS Dead Letter Queues (Zero Dropped Alerts)<br/>• S3 Versioning Delete Marker Rollback (RPO = 0)<br/>• RDS & DynamoDB Point-in-Time Recovery (PITR)"]
         P5["5. Performance Efficiency<br/>• CloudFront Global Edge CDN with HTTP/3<br/>• Graviton2 (arm64) Serverless Compute<br/>• S3 Direct-to-Object Presigned POST Uploads<br/>• Single-Digit Millisecond DynamoDB Reads"]
         P6["6. Sustainability<br/>• Zero Idle Compute Carbon Footprint in Demo<br/>• Graviton2 60% Energy Efficiency Improvement<br/>• Ephemeral Container & ETL Lifecycle"]
@@ -80,8 +80,8 @@ flowchart TD
 1. **100% Modular Infrastructure-as-Code**:
    - 14 reusable Terraform child modules + isolated bootstrap module with explicit variable contracts, standardized tagging, and remote state locking.
 2. **Shift-Left Quality & Security Gates**:
-   - 46 automated unit/integration tests running under pytest with Moto AWS mocks.
-   - 900 Checkov IaC checks passing with 0 failures and documented skips.
+   - 47 automated unit/integration tests running under pytest with Moto AWS mocks.
+   - 882 Checkov IaC checks passing with 0 failures and documented skips.
    - Automated SARIF security reporting directly into GitHub Security tab.
 3. **Documented Operational Incident Runbooks**:
    - [`RUNBOOK-01-Compromised-IAM-Credentials.md`](file:///Users/Yousef/pf-shield-cloud-security/docs/runbooks/RUNBOOK-01-Compromised-IAM-Credentials.md): IAM quarantine triage and credential rotation.
@@ -151,4 +151,4 @@ flowchart TD
 
 1. **Enterprise Security Is Not Tied to Infrastructure Cost**: By orchestrating AWS VPC Gateway Endpoints, S3 Bucket Keys, Serverless Graviton2 compute, and shift-left CI/CD policy validation, PF-Shield satisfies stringent enterprise compliance (UAE PDPL, ISO 27001, SOC 2) without paying the standing overhead of traditional enterprise cloud footprints.
 2. **Zero-Trust Defense-in-Depth**: Every layer—from edge CloudFront CDN and WAF to IAM permission boundaries, multi-tier VPC isolation, and automated SOAR playbooks—operates under explicit deny and zero-trust verification principles.
-3. **Auditable Operational Evidence**: The architecture pairs theoretical engineering rigor with empirical validation: 46 automated tests, 900 Checkov IaC checks, sub-1.5s attack containment, and complete disaster recovery restoration procedures.
+3. **Auditable Operational Evidence**: The architecture pairs theoretical engineering rigor with empirical validation: 47 automated tests, 882 Checkov IaC checks, sub-1.5s attack containment, and complete disaster recovery restoration procedures.

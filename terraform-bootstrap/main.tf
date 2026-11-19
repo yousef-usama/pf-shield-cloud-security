@@ -121,6 +121,7 @@ resource "aws_iam_policy" "github_actions_policy" {
           "logs:*",
           "cloudwatch:*",
           "budgets:*",
+          "ecr:*",
           "ec2:Describe*",
           "ec2:CreateVpc*",
           "ec2:DeleteVpc*",
@@ -180,4 +181,140 @@ resource "aws_iam_policy" "github_actions_policy" {
 resource "aws_iam_role_policy_attachment" "github_actions_attach" {
   role       = aws_iam_role.github_actions.name
   policy_arn = aws_iam_policy.github_actions_policy.arn
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# 4. FOUNDATIONAL ECR REPOSITORIES & RETENTION (BOOTSTRAP STAGE)
+# ---------------------------------------------------------------------------------------------------------------------
+# Provisioned in bootstrap stage so CI/CD image pipelines can build, push, scan, and sign
+# container images before speculative Terraform production planning and deployment apply.
+
+resource "aws_kms_key" "bootstrap_cmk" {
+  description             = "PF-Shield Bootstrap ECR Encryption Key"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootKeyAdministration"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowECREncryption"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecr.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "pf-shield-bootstrap-cmk-${var.environment}"
+    Compliance  = "UAE-PDPL-ISO27001"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ecr_repository" "listings_api" {
+  name                 = "pf-shield/listings-api-${var.environment}"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.bootstrap_cmk.arn
+  }
+
+  tags = {
+    Name        = "pf-shield-ecr-listings-api-${var.environment}"
+    Compliance  = "CIS-AWS-Benchmark-ECR"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ecr_repository" "broker_kyc_api" {
+  name                 = "pf-shield/broker-kyc-api-${var.environment}"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.bootstrap_cmk.arn
+  }
+
+  tags = {
+    Name        = "pf-shield-ecr-broker-kyc-api-${var.environment}"
+    Compliance  = "CIS-AWS-Benchmark-ECR"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ecr_repository" "document_scan_worker" {
+  name                 = "pf-shield/document-scan-worker-${var.environment}"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.bootstrap_cmk.arn
+  }
+
+  tags = {
+    Name        = "pf-shield-ecr-document-scan-worker-${var.environment}"
+    Compliance  = "CIS-AWS-Benchmark-ECR"
+    Environment = var.environment
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "prune_policy" {
+  for_each = {
+    listings_api         = aws_ecr_repository.listings_api.name
+    broker_kyc_api       = aws_ecr_repository.broker_kyc_api.name
+    document_scan_worker = aws_ecr_repository.document_scan_worker.name
+  }
+
+  repository = each.value
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images older than 7 days"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 7
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
 }

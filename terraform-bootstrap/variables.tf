@@ -33,3 +33,9 @@ variable "owner" {
   type        = string
   default     = "YousefOsama"
 }
+
+variable "environment" {
+  description = "Target deployment environment (production or demo)"
+  type        = string
+  default     = "production"
+}

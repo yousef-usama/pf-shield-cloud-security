@@ -12,9 +12,9 @@ All automated test suites, policy-as-code scanners, and regression benchmarks ex
 
 | Component / Requirement | Validation Tool & Command | Target Standard | Live Status | Evidence Summary |
 | :--- | :--- | :--- | :--- | :--- |
-| **Comprehensive Test Suite** | `pytest src/tests/ -v` (Moto AWS mocks) | 100% test pass rate | **PASS (100%)** | **46/46 test cases passed** in 7.06s |
+| **Comprehensive Test Suite** | `pytest src/tests/ -v` (Moto AWS mocks) | 100% test pass rate | **PASS (100%)** | **47/47 test cases passed** in 7.24s |
 | **Infrastructure-as-Code** | `terraform validate` across 13 modules | AWS Provider v5.100 | **PASS** | Valid syntax, 0 deprecations |
-| **Static Security Scanning** | `checkov -d terraform/ -d terraform-bootstrap/` | CIS AWS / Bridgecrew | **PASS** | **900 checks passed, 0 failed, 192 skipped** |
+| **Static Security Scanning** | `checkov -d terraform/ -d terraform-bootstrap/` | CIS AWS / Bridgecrew | **PASS** | **882 checks passed, 0 failed, 192 skipped** |
 | **Kubernetes Shift-Left** | `kyverno apply k8s-security-policies/` | Pod Security Standards | **PASS** | Default-deny & root prohibition verified |
 | **Secret Detection** | `gitleaks detect` | Zero hardcoded credentials | **PASS** | Clean commit history, 0 secret leaks |
 | **Supply Chain Governance** | `test_all_github_actions_are_pinned` | SLSA Level 3 compliance | **PASS** | 100% of actions pinned to 40-char SHA |
@@ -41,8 +41,9 @@ src/tests/test_analytics_and_database.py::test_clickhouse_host_hardening_specifi
 src/tests/test_analytics_and_database.py::test_analytics_s3_data_lake_security PASSED          [ 18%]
 src/tests/test_ci_cd_and_supply_chain.py::test_all_github_actions_are_pinned_to_immutable_commit_sha PASSED [ 20%]
 src/tests/test_ci_cd_and_supply_chain.py::test_dependabot_configuration_coverage PASSED       [ 22%]
-src/tests/test_ci_cd_and_supply_chain.py::test_github_oidc_trust_policy_strict_scoping PASSED  [ 25%]
-src/tests/test_ci_cd_and_supply_chain.py::test_devsecops_pipeline_security_gates PASSED       [ 27%]
+src/tests/test_ci_cd_and_supply_chain.py::test_github_oidc_trust_policy_strict_scoping PASSED  [ 23%]
+src/tests/test_ci_cd_and_supply_chain.py::test_devsecops_pipeline_security_gates PASSED       [ 25%]
+src/tests/test_ci_cd_and_supply_chain.py::test_ci_cd_ecr_naming_cosign_and_remote_backend_invariants PASSED [ 27%]
 src/tests/test_disaster_recovery.py::test_s3_delete_marker_recovery PASSED                     [ 29%]
 src/tests/test_disaster_recovery.py::test_s3_version_rollback_after_corruption PASSED          [ 31%]
 src/tests/test_disaster_recovery.py::test_dynamodb_point_in_time_recovery_status PASSED        [ 34%]
@@ -78,7 +79,7 @@ src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_idempotency_prevents_duplic
 src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_bypasses_protected_principal PASSED      [ 97%]
 src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_human_approval_mode PASSED               [100%]
 
-======================== 46 passed, 1 warning in 7.06s =========================
+======================== 47 passed, 1 warning in 7.24s =========================
 ```
 
 ---
@@ -88,12 +89,12 @@ src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_human_approval_mode PASSED 
 ```text
 terraform scan results:
 
-Passed checks: 450, Failed checks: 0, Skipped checks: 96
+Passed checks: 441, Failed checks: 0, Skipped checks: 96
 
 
 terraform scan results:
 
-Passed checks: 900, Failed checks: 0, Skipped checks: 192
+Passed checks: 882, Failed checks: 0, Skipped checks: 192
 ```
 
 ---
@@ -229,3 +230,24 @@ Real-world deployment obstacles and configuration bugs encountered during develo
   2. Created dedicated `aws_acm_certificate.cloudfront` in `us-east-1` for `api.${var.public_domain_name}` with automated Route 53 DNS validation (`aws_route53_record.cloudfront_cert_validation` and `aws_acm_certificate_validation.cloudfront`).
   3. Created dual Route 53 ALIAS records (`aws_route53_record.api_alias` and `api_alias_ipv6`) mapping `api.${var.public_domain_name}` directly to the CloudFront distribution domain name.
   4. Attached the verified `us-east-1` certificate to `aws_cloudfront_distribution.alb` with `TLSv1.2_2021` minimum protocol version and aligned Cognito callback redirect endpoints (`https://api.${var.public_domain_name}/oauth2/idpresponse`).
+
+---
+
+### Incident 8: Container Image Deployment Routing, ECR First-Deployment Ordering & CI Remote Backend Lock Enforcement
+
+- **Symptoms & Error**:
+  ```text
+  1. ECR Error: name unknown: The repository with name 'pf-listings-api-production' does not exist in the registry
+  2. Runtime Divergence: broker-kyc-api and document-scan-worker tasks running listings-api image binary
+  3. CI Operational Risk: production apply running with -backend=false creates ephemeral local state bypassing DynamoDB locking
+  ```
+- **Root Cause Analysis (RCA)**:
+  Three interlocking CI/CD lifecycle issues were identified:
+  1. *ECR Naming & Chicken-and-Egg Ordering*: Terraform provisioned ECR repositories under `pf-shield/<service>-production`, while the CI workflow pushed to `pf-<service>-production`. Furthermore, in a greenfield environment, ECR repositories did not exist before the CI image pipeline attempted to push images, because the main Terraform apply was sequenced after image building.
+  2. *Single Digest Broadcast*: CI captured only the listings API image digest. Because the image URI contained `/`, the Terraform image resolution logic applied that single listings URI across all three microservices.
+  3. *Ephemeral State in Production Apply*: The production plan and apply CI jobs executed `terraform init -backend=false`, bypassing remote S3 state persistence and DynamoDB distributed state locking (`pf-shield-tf-locks`).
+- **Resolution & Engineering Remediation**:
+  1. *Foundational ECR Bootstrap*: Provisioned foundational ECR repositories (`pf-shield/listings-api-${var.environment}`, `broker-kyc-api`, `document-scan-worker`) with KMS CMK encryption and 7-day untagged lifecycle policies in `terraform-bootstrap/main.tf`. Concurrently added an automated pre-provisioning check in CI before Docker push.
+  2. *Independent Multi-Service Digests*: Configured CI to push to `pf-shield/...` and capture independent immutable digests for each microservice (`LISTINGS_DIGEST`, `BROKER_KYC_DIGEST`, `SCAN_WORKER_DIGEST`) into `image-digests.env`. Added `container_image_digests` map variable in Terraform and routed each digest directly to its corresponding ECS task definition with individual production preconditions.
+  3. *Strict Cosign Enforcement*: Signed all three container digests with Cosign keyless signing, eliminating masking (`|| echo`) so that signing failures fail the pipeline.
+  4. *Encrypted Remote State & Locking in CI*: Updated production CI plan and apply jobs to dynamically initialize the remote backend using `-backend-config="bucket=${STATE_BUCKET}"` and `-backend-config="dynamodb_table=pf-shield-tf-locks"` when AWS credentials are present.

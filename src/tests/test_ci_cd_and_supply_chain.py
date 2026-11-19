@@ -117,3 +117,43 @@ def test_devsecops_pipeline_security_gates():
     assert "cosign" in content.lower(), "Pipeline must verify Cosign digital signature capabilities"
     assert "kyverno" in content.lower(), "Pipeline must enforce Kyverno policy verification"
     assert "upload-sarif" in content, "Pipeline must upload SARIF results to GitHub Security"
+
+
+def test_ci_cd_ecr_naming_cosign_and_remote_backend_invariants():
+    """Verify that devsecops-pipeline.yml:
+    1. Tags and pushes to ECR repository paths matching pf-shield/<service>-production.
+    2. Captures independent digests for listings, broker-kyc, and document-scan-worker.
+    3. Mandatory Cosign keyless signing fails the pipeline on signing error (no '|| echo' masking).
+    4. Production plan and apply jobs initialize the remote S3/DynamoDB state backend with state locking.
+    """
+    pipeline_path = os.path.join(REPO_ROOT, ".github", "workflows", "devsecops-pipeline.yml")
+    assert os.path.exists(pipeline_path), "Missing .github/workflows/devsecops-pipeline.yml"
+
+    with open(pipeline_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # 1. Verify ECR repository names match pf-shield/<service>-production
+    assert "pf-shield/listings-api-production" in content, "ECR repo name must match pf-shield/listings-api-production"
+    assert "pf-shield/broker-kyc-api-production" in content, "ECR repo name must match pf-shield/broker-kyc-api-production"
+    assert "pf-shield/document-scan-worker-production" in content, "ECR repo name must match pf-shield/document-scan-worker-production"
+
+    # Prohibit un-namespaced repository pushes
+    assert "/pf-listings-api-production" not in content, "Found un-namespaced pf-listings-api-production push"
+    assert "/pf-broker-kyc-api-production" not in content, "Found un-namespaced pf-broker-kyc-api-production push"
+    assert "/pf-document-scan-worker-production" not in content, "Found un-namespaced pf-document-scan-worker-production push"
+
+    # 2. Verify independent digest capture
+    assert "LISTINGS_DIGEST=" in content
+    assert "BROKER_KYC_DIGEST=" in content
+    assert "SCAN_WORKER_DIGEST=" in content
+    assert "container_image_digests" in content
+
+    # 3. Verify Cosign signing does not mask failures
+    assert 'cosign sign --yes "${LISTINGS_DIGEST}"' in content
+    assert 'cosign sign --yes "${BROKER_KYC_DIGEST}"' in content
+    assert 'cosign sign --yes "${SCAN_WORKER_DIGEST}"' in content
+    assert 'cosign sign --yes "${LISTINGS_DIGEST}" || echo' not in content, "Cosign failure must not be masked with || echo"
+
+    # 4. Verify remote backend initialization for production workflows
+    assert '-backend-config="bucket=${STATE_BUCKET}"' in content, "Production workflow must supply remote backend state bucket"
+    assert '-backend-config="dynamodb_table=pf-shield-tf-locks"' in content, "Production workflow must supply DynamoDB state lock table"
