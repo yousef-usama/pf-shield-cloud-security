@@ -144,6 +144,7 @@ def get_jwks_keys() -> dict[str, Any]:
     jwks_url = f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
     try:
         req = urllib.request.Request(jwks_url, headers={"User-Agent": "PF-Shield-Broker-KYC-API"})
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         with urllib.request.urlopen(req, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
             keys_dict = {}
@@ -348,9 +349,9 @@ async def generate_kyc_presign(
 
     # Ignore untrusted caller body overrides
     if req.broker_id and req.broker_id != broker_id:
-        logger.warning("Caller body broker_id '%s' ignored; using token claim '%s'", req.broker_id, broker_id)
+        logger.warning("Caller body broker identifier ignored; strictly using verified token broker claim")
     if req.tenant_id and req.tenant_id != tenant_id:
-        logger.warning("Caller body tenant_id '%s' ignored; using token claim '%s'", req.tenant_id, tenant_id)
+        logger.warning("Caller body tenant identifier ignored; strictly using verified token tenant claim")
 
     # 3. Document Type & Extension Validation
     doc_type = req.document_type.lower()

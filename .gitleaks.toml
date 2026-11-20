@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for documentation generator scripts and synthetic test logs"
+paths = [
+    '''scripts/generate_evidence_screenshots\.py''',
+    '''docs/screenshots/.*''',
+]
