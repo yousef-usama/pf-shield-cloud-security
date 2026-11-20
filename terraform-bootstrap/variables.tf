@@ -5,9 +5,9 @@ variable "aws_region" {
 }
 
 variable "github_repository" {
-  description = "GitHub organization/repository allowed to assume the OIDC role (e.g. YousefOsama/pf-shield-cloud-security)"
+  description = "GitHub organization/repository allowed to assume the OIDC role (e.g. yousef-usama/pf-shield-cloud-security)"
   type        = string
-  default     = "YousefOsama/pf-shield-cloud-security"
+  default     = "yousef-usama/pf-shield-cloud-security"
 }
 
 variable "github_branch" {
@@ -31,7 +31,7 @@ variable "role_name" {
 variable "owner" {
   description = "Owner tag assigned to bootstrap cloud resources"
   type        = string
-  default     = "YousefOsama"
+  default     = "yousef-usama"
 }
 
 variable "environment" {
