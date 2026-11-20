@@ -4,6 +4,12 @@ variable "aws_region" {
   default     = "me-central-1"
 }
 
+variable "ecr_region" {
+  description = "Target region for foundational ECR container repositories with full push support"
+  type        = string
+  default     = "eu-central-1"
+}
+
 variable "github_repository" {
   description = "GitHub organization/repository allowed to assume the OIDC role (e.g. yousef-usama/pf-shield-cloud-security)"
   type        = string

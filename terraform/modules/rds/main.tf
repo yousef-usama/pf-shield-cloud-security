@@ -154,7 +154,7 @@ resource "aws_db_instance" "main" {
   identifier = "pf-shield-db-${var.environment}"
   engine     = "postgres"
   # renovate: datasource=aws-rds-engine-version depName=postgres
-  engine_version = "16.3"
+  engine_version = "16.8"
   instance_class = var.rds_instance_class
 
   allocated_storage     = 20

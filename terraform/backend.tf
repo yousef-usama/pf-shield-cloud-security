@@ -15,7 +15,7 @@
 terraform {
   backend "s3" {
     bucket         = "pf-shield-tfstate-339712755065"
-    key            = "pf-shield/prod-sim/terraform.tfstate"
+    key            = "pf-shield/production/terraform.tfstate"
     region         = "me-central-1"
     dynamodb_table = "pf-shield-tf-locks"
     encrypt        = true

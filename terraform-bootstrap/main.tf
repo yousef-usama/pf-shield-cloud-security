@@ -190,6 +190,7 @@ resource "aws_iam_role_policy_attachment" "github_actions_attach" {
 # container images before speculative Terraform production planning and deployment apply.
 
 resource "aws_kms_key" "bootstrap_cmk" {
+  provider                = aws.ecr
   description             = "PF-Shield Bootstrap ECR Encryption Key"
   deletion_window_in_days = 7
   enable_key_rotation     = true
@@ -232,6 +233,7 @@ resource "aws_kms_key" "bootstrap_cmk" {
 }
 
 resource "aws_ecr_repository" "listings_api" {
+  provider             = aws.ecr
   name                 = "pf-shield/listings-api-${var.environment}"
   image_tag_mutability = "IMMUTABLE"
 
@@ -252,6 +254,7 @@ resource "aws_ecr_repository" "listings_api" {
 }
 
 resource "aws_ecr_repository" "broker_kyc_api" {
+  provider             = aws.ecr
   name                 = "pf-shield/broker-kyc-api-${var.environment}"
   image_tag_mutability = "IMMUTABLE"
 
@@ -272,6 +275,7 @@ resource "aws_ecr_repository" "broker_kyc_api" {
 }
 
 resource "aws_ecr_repository" "document_scan_worker" {
+  provider             = aws.ecr
   name                 = "pf-shield/document-scan-worker-${var.environment}"
   image_tag_mutability = "IMMUTABLE"
 
@@ -292,6 +296,7 @@ resource "aws_ecr_repository" "document_scan_worker" {
 }
 
 resource "aws_ecr_lifecycle_policy" "prune_policy" {
+  provider = aws.ecr
   for_each = {
     listings_api         = aws_ecr_repository.listings_api.name
     broker_kyc_api       = aws_ecr_repository.broker_kyc_api.name

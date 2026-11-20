@@ -232,7 +232,10 @@ resource "aws_iam_policy" "ecs_execution_permission_boundary" {
         Resource = "*"
         Condition = {
           StringEquals = {
-            "aws:RequestedRegion" = var.aws_region
+            "aws:RequestedRegion" = [
+              var.aws_region,
+              "eu-central-1"
+            ]
           }
         }
       },

@@ -41,11 +41,16 @@ protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,p
 # Public Domain & Retention Settings (Production Baseline)
 public_domain_name  = "yousef-usama-cloud.click"
 route53_zone_id     = "Z061996824D3MYGC69U2P"
-container_image_tag = "pf-shield@sha256:ba837841108226011a68ba9b0a6245084988f01b3d7b4202a4d339185a73e670"
+ecr_repository_urls = {
+  listings_api         = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/listings-api-production"
+  broker_kyc_api       = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/broker-kyc-api-production"
+  document_scan_worker = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/document-scan-worker-production"
+}
+container_image_tag = "pf-shield@sha256:7cfd0ddaaf9706b54b0b7f9876aa90b04266c01ff932cfa8bd85ff12a781f783"
 container_image_digests = {
-  listings_api         = "123456789012.dkr.ecr.me-central-1.amazonaws.com/pf-shield/listings-api-production@sha256:ba837841108226011a68ba9b0a6245084988f01b3d7b4202a4d339185a73e670"
-  broker_kyc_api       = "123456789012.dkr.ecr.me-central-1.amazonaws.com/pf-shield/broker-kyc-api-production@sha256:d123456789012345678901234567890123456789012345678901234567890123"
-  document_scan_worker = "123456789012.dkr.ecr.me-central-1.amazonaws.com/pf-shield/document-scan-worker-production@sha256:e123456789012345678901234567890123456789012345678901234567890123"
+  listings_api         = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/listings-api-production@sha256:7cfd0ddaaf9706b54b0b7f9876aa90b04266c01ff932cfa8bd85ff12a781f783"
+  broker_kyc_api       = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/broker-kyc-api-production@sha256:cbcd24d2231aaa96197b2e39d048a121f63f1936d9874e270f6fe80c194bc154"
+  document_scan_worker = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/document-scan-worker-production@sha256:85ea1ed6233d7e9ddf5fe3ab8bb311a1cb04160509bd81546ee93d6a9901cae7"
 }
 log_retention_days      = 365
 enable_waf_logging      = true

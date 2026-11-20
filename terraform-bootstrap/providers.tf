@@ -22,3 +22,19 @@ provider "aws" {
     }
   }
 }
+
+provider "aws" {
+  alias  = "ecr"
+  region = var.ecr_region
+
+  default_tags {
+    tags = {
+      Project            = "PF-Shield"
+      Environment        = "Bootstrap"
+      ManagedBy          = "Terraform"
+      CostCenter         = "PF-Cloud-Security"
+      DataClassification = "Restricted-UAE-PDPL"
+      Owner              = var.owner
+    }
+  }
+}

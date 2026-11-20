@@ -150,7 +150,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@e3ddf14f329da761abc67414b5403c45356c182e # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: me-central-1
+          aws-region: eu-central-1
           audience: sts.amazonaws.com
         env:
           AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -167,7 +167,7 @@ jobs:
         run: |
           echo "Verifying foundational ECR repositories provisioned by terraform-bootstrap exist..."
           for repo in pf-shield/listings-api-production pf-shield/broker-kyc-api-production pf-shield/document-scan-worker-production; do
-            if ! aws ecr describe-repositories --repository-names "$repo" --region me-central-1 >/dev/null 2>&1; then
+            if ! aws ecr describe-repositories --repository-names "$repo" --region eu-central-1 >/dev/null 2>&1; then
               echo "ERROR: Foundational ECR repository '$repo' not found. Provision bootstrap foundation first via terraform-bootstrap/."
               exit 1
             fi
@@ -181,7 +181,7 @@ jobs:
         run: |
           REGISTRY="${{ steps.login-ecr.outputs.registry }}"
           if [ -z "$REGISTRY" ]; then
-            REGISTRY="123456789012.dkr.ecr.me-central-1.amazonaws.com"
+            REGISTRY="339712755065.dkr.ecr.eu-central-1.amazonaws.com"
           fi
           echo "Target ECR Registry: ${REGISTRY}"
 
