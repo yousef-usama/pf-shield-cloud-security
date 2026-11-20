@@ -336,6 +336,11 @@ jobs:
           name: container-image-digests
           path: ./
 
+      - name: Authenticate Docker to ECR for Cosign Verification
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.eu-central-1.amazonaws.com"
+
       - name: Verify Container Image Cosign Signatures Before Plan
         run: |
           if [ ! -f image-digests.env ]; then
