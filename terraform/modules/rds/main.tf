@@ -23,37 +23,6 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
-resource "aws_db_parameter_group" "main" {
-  count       = var.enable_rds ? 1 : 0
-  name        = "pf-shield-pg16-params-${var.environment}"
-  family      = "postgres16"
-  description = "Hardened PostgreSQL 16 parameter group enforcing TLS 1.2+ and connection logging"
-
-  parameter {
-    name  = "rds.force_ssl"
-    value = "1"
-  }
-
-  parameter {
-    name  = "log_connections"
-    value = "1"
-  }
-
-  parameter {
-    name  = "log_disconnections"
-    value = "1"
-  }
-
-  parameter {
-    name  = "log_min_duration_statement"
-    value = "1000" # Log queries taking > 1 second for performance and security audit
-  }
-
-  tags = {
-    Name        = "pf-shield-pg16-params-${var.environment}"
-    Environment = var.environment
-  }
-}
 
 # ---------------------------------------------------------------------------------------------------------------------
 # 2. CREDENTIAL MANAGEMENT (AWS SECRETS MANAGER ENCRYPTED WITH KMS CMK)
@@ -169,7 +138,7 @@ resource "aws_db_instance" "main" {
 
   db_subnet_group_name   = aws_db_subnet_group.main[0].name
   vpc_security_group_ids = [var.database_security_group_id]
-  parameter_group_name   = aws_db_parameter_group.main[0].name
+  parameter_group_name   = "default.postgres16"
   publicly_accessible    = false
 
   multi_az                  = var.environment == "production" ? true : false

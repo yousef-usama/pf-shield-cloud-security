@@ -7,7 +7,8 @@ data "aws_caller_identity" "current" {}
 
 data "aws_availability_zones" "available" {
   #checkov:skip=CKV_AWS_394: Availability zones dynamically queried and indexed strictly to 0 and 1
-  state = "available"
+  state         = "available"
+  exclude_names = ["me-central-1b"]
 }
 
 locals {

@@ -69,12 +69,16 @@ module "secrets" {
   sns_topic_arn          = module.soar_engine.security_incidents_sns_topic_arn
 }
 
-# 7. Broker Identity & OIDC Provider (Amazon Cognito)
+# 7. Broker Identity & OIDC Provider (Amazon Cognito in EU-Central-1)
 module "identity" {
   source = "./modules/identity"
 
+  providers = {
+    aws = aws.eu_central_1
+  }
+
   environment        = var.environment
-  aws_region         = var.aws_region
+  aws_region         = "eu-central-1"
   public_domain_name = var.public_domain_name
 }
 

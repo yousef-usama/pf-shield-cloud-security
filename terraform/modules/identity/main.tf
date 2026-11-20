@@ -5,6 +5,15 @@
 # aligned with ISO 27001:2022 A.5.15 and UAE PDPL Art. 13.
 # =====================================================================================================================
 
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 resource "aws_cognito_user_pool" "broker_pool" {
   #checkov:skip=CKV_AWS_109: MFA is configured as OPTIONAL to accommodate demonstration flows while enforcing software TOTP
   name                     = "pf-shield-broker-pool-${var.environment}"

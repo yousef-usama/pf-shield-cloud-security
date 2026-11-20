@@ -401,11 +401,11 @@ resource "aws_iam_role_policy" "glue_policy" {
 }
 
 resource "aws_s3_object" "glue_etl_script" {
-  bucket     = aws_s3_bucket.analytics.id
-  key        = "scripts/glue_etl_sanitize_listings.py"
-  source     = "${path.module}/../../../src/analytics/glue_etl_sanitize_listings.py"
-  kms_key_id = var.kms_key_arn
-  etag       = filemd5("${path.module}/../../../src/analytics/glue_etl_sanitize_listings.py")
+  bucket      = aws_s3_bucket.analytics.id
+  key         = "scripts/glue_etl_sanitize_listings.py"
+  source      = "${path.module}/../../../src/analytics/glue_etl_sanitize_listings.py"
+  kms_key_id  = var.kms_key_arn
+  source_hash = filemd5("${path.module}/../../../src/analytics/glue_etl_sanitize_listings.py")
 }
 
 resource "aws_glue_job" "sanitize_listings" {

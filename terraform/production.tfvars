@@ -28,7 +28,7 @@ enable_cloudtrail_s3_data_events = true
 audit_retention_days             = 365
 
 # Relational Database & Analytics Lab (Production Baseline)
-enable_rds              = true
+enable_rds              = false
 rds_instance_class      = "db.t4g.micro"
 enable_analytics_lab    = true
 analytics_instance_type = "t4g.small"
@@ -54,4 +54,4 @@ container_image_digests = {
 }
 log_retention_days      = 365
 enable_waf_logging      = true
-enable_alb_cognito_auth = true
+enable_alb_cognito_auth = false

@@ -44,6 +44,23 @@ provider "aws" {
   }
 }
 
+# Dedicated EU-Central-1 AWS Provider for Cross-Region Cognito & ECR Services
+provider "aws" {
+  alias  = "eu_central_1"
+  region = "eu-central-1"
+
+  default_tags {
+    tags = {
+      Project            = "PF-Shield"
+      Environment        = var.environment
+      ManagedBy          = "Terraform"
+      CostCenter         = "PF-Cloud-Security"
+      DataClassification = "Restricted-UAE-PDPL"
+      Owner              = var.owner
+    }
+  }
+}
+
 locals {
   # Documentation of verified regional service availability between UAE (me-central-1) and Bahrain (me-south-1).
   # Used to document architectural trade-offs and provide regional verification rationale.
