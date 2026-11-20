@@ -40,8 +40,8 @@ containment_mode               = "AUTOMATIC"
 protected_principals_allowlist = "root,AWSServiceRole,pf-shield-github-actions,pf-soar-s3-lockdown,pf-soar-iam-quarantine,break-glass,security-admin,lead-security-engineer"
 
 # Public Domain & Retention Settings (Production Baseline)
-public_domain_name  = "yousef-usama-cloud.click"
-route53_zone_id     = "Z061996824D3MYGC69U2P"
+public_domain_name = "yousef-usama-cloud.click"
+route53_zone_id    = "Z061996824D3MYGC69U2P"
 ecr_repository_urls = {
   listings_api         = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/listings-api-production"
   broker_kyc_api       = "339712755065.dkr.ecr.eu-central-1.amazonaws.com/pf-shield/broker-kyc-api-production"

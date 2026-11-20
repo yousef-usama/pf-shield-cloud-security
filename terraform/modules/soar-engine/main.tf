@@ -420,16 +420,16 @@ resource "aws_lambda_function" "s3_lockdown" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue configured below via dead_letter_config block
   #checkov:skip=CKV_AWS_117: Lambda is intentionally non-VPC to avoid expensive VPC NAT gateways and reach IAM/SNS directly
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
-  function_name                  = "pf-soar-s3-lockdown-${var.environment}"
-  role                           = aws_iam_role.s3_lockdown_role.arn
-  handler                        = "playbook_s3_lockdown.lambda_handler"
-  runtime                        = "python3.12"
-  architectures                  = ["arm64"]
-  memory_size                    = 128
-  timeout                        = 10
-  filename                       = data.archive_file.s3_lockdown_zip.output_path
-  source_code_hash               = data.archive_file.s3_lockdown_zip.output_base64sha256
-  kms_key_arn                    = var.kms_key_arn
+  function_name    = "pf-soar-s3-lockdown-${var.environment}"
+  role             = aws_iam_role.s3_lockdown_role.arn
+  handler          = "playbook_s3_lockdown.lambda_handler"
+  runtime          = "python3.12"
+  architectures    = ["arm64"]
+  memory_size      = 128
+  timeout          = 10
+  filename         = data.archive_file.s3_lockdown_zip.output_path
+  source_code_hash = data.archive_file.s3_lockdown_zip.output_base64sha256
+  kms_key_arn      = var.kms_key_arn
 
   dead_letter_config {
     target_arn = aws_sqs_queue.s3_lockdown_dlq.arn
@@ -558,16 +558,16 @@ resource "aws_lambda_function" "iam_quarantine" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue configured below via dead_letter_config block
   #checkov:skip=CKV_AWS_117: Lambda is intentionally non-VPC to avoid expensive VPC NAT gateways and reach IAM/SNS directly
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
-  function_name                  = "pf-soar-iam-quarantine-${var.environment}"
-  role                           = aws_iam_role.iam_quarantine_role.arn
-  handler                        = "playbook_iam_quarantine.lambda_handler"
-  runtime                        = "python3.12"
-  architectures                  = ["arm64"]
-  memory_size                    = 128
-  timeout                        = 10
-  filename                       = data.archive_file.iam_quarantine_zip.output_path
-  source_code_hash               = data.archive_file.iam_quarantine_zip.output_base64sha256
-  kms_key_arn                    = var.kms_key_arn
+  function_name    = "pf-soar-iam-quarantine-${var.environment}"
+  role             = aws_iam_role.iam_quarantine_role.arn
+  handler          = "playbook_iam_quarantine.lambda_handler"
+  runtime          = "python3.12"
+  architectures    = ["arm64"]
+  memory_size      = 128
+  timeout          = 10
+  filename         = data.archive_file.iam_quarantine_zip.output_path
+  source_code_hash = data.archive_file.iam_quarantine_zip.output_base64sha256
+  kms_key_arn      = var.kms_key_arn
 
   dead_letter_config {
     target_arn = aws_sqs_queue.iam_quarantine_dlq.arn

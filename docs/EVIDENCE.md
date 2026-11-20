@@ -8,6 +8,8 @@ This document provides auditable verification proofs, live security isolation te
 
 ## 1. Verification Matrix & Quality Gate Results
 
+![Verification Summary](screenshots/00-verification-summary.png)
+
 All automated test suites, policy-as-code scanners, and regression benchmarks execute cleanly with zero failures.
 
 | Component / Requirement | Validation Tool & Command | Target Standard | Live Status | Evidence Summary |
@@ -24,6 +26,8 @@ All automated test suites, policy-as-code scanners, and regression benchmarks ex
 ---
 
 ## 2. Live Test Suite Execution Log (`pytest`)
+
+![Compute & Regional Verification](screenshots/01-compute-verification.png)
 
 ```text
 ============================= test session starts ==============================
@@ -86,6 +90,8 @@ src/tests/test_soar_s3_lockdown.py::test_s3_lockdown_human_approval_mode PASSED 
 
 ## 3. Checkov Policy-as-Code Static Analysis Log
 
+![DevSecOps Pipeline Health](screenshots/02-devsecops-pipeline-health.png)
+
 ```text
 terraform scan results:
 
@@ -104,6 +110,8 @@ Passed checks: 882, Failed checks: 0, Skipped checks: 192
 ### 4.1 Zero-Trust Data Perimeter Enforcement (S3 Access Denied)
 When an unauthorized caller or external script attempts to retrieve documents directly from the KYC Vault without passing through the authorized VPC Gateway Endpoint:
 
+![Security Isolation Denied](screenshots/07-security-isolation-denied.png)
+
 ```bash
 $ aws s3 cp s3://pf-shield-kyc-vault-production/kyc-documents/tenant-uae-1/broker-42/passport/doc-99.pdf ./stolen.pdf
 fatal error: An error occurred (403) when calling the GetObject operation: Access Denied
@@ -113,12 +121,26 @@ fatal error: An error occurred (403) when calling the GetObject operation: Acces
 ### 4.2 Authorized Legitimate Access Allowed (Private Endpoint + KMS CMK)
 When an authorized identity (KYC Lambda role or internal microservice) accesses the KYC Vault across the private VPC Gateway Endpoint:
 
+![Security Isolation Allowed](screenshots/08-security-isolation-allowed.png)
+
 ```bash
 $ aws s3 cp test-doc.pdf s3://pf-shield-kyc-vault-production/kyc-documents/tenant-uae-1/broker-42/passport/doc-99.pdf \
     --sse aws:kms --sse-kms-key-id arn:aws:kms:me-central-1:123456789012:key/pf-kyc-cmk
 upload: ./test-doc.pdf to s3://pf-shield-kyc-vault-production/kyc-documents/tenant-uae-1/broker-42/passport/doc-99.pdf
 ```
 *Verification: The upload succeeds using KMS CMK envelope encryption with S3 Bucket Key cost reduction.*
+
+### 4.3 Live Route 53 DNS & TLS 1.3 ALB Ingress Verification
+![Live Route 53 DNS & TLS 1.3 ALB Ingress](screenshots/04-live-dns-https-alb.png)
+
+### 4.4 Live Edge API Gateway Properties Catalog (UAE-PDPL Verified)
+![Live Edge API Gateway Properties Catalog](screenshots/05-live-edge-api-catalog.png)
+
+### 4.5 Live Zero-Trust Edge Authentication Enforcement
+![Live Zero-Trust Edge Authentication Enforcement](screenshots/06-live-edge-auth-enforcement.png)
+
+### 4.6 Remote State Synchronization & Live Outputs
+![Remote State Synchronization & Live Outputs](screenshots/09-terraform-apply-live-state.png)
 
 ---
 
@@ -135,6 +157,8 @@ Real-world deployment obstacles and configuration bugs encountered during develo
     No attribute specified when one (and only one) of [rule[0].filter, rule[0].prefix] is required.
     This will be an error in a future version of the AWS provider.
   ```
+  **Terminal Failure Evidence:**
+  ![Terminal Failure - Incident 1](screenshots/incident-01-terminal-failure.png)
 - **Root Cause Analysis (RCA)**:
   Modern AWS Terraform Provider (`~> 5.0`) enforces that `aws_s3_bucket_lifecycle_configuration` rules must explicitly declare an object filter scope using `filter {}` rather than relying on legacy implicit whole-bucket matching. Without `filter {}`, Terraform generates a deprecation warning indicating the syntax will fail in future provider releases.
 - **Resolution & Engineering Remediation**:
@@ -150,6 +174,8 @@ Real-world deployment obstacles and configuration bugs encountered during develo
   	FAILED for resource: module.soar_engine.aws_iam_role_policy.s3_lockdown_permissions
   	File: /modules/soar-engine/main.tf:235-286
   ```
+  **Terminal Failure Evidence:**
+  ![Terminal Failure - Incident 2](screenshots/incident-02-terminal-failure.png)
 - **Root Cause Analysis (RCA)**:
   Checkov policy `CKV_AWS_286` flags any IAM policy containing `iam:AttachRolePolicy` or `iam:AttachUserPolicy` as a privilege escalation vector. However, in our automated SOAR architecture, these specific IAM actions are **the core remediation mechanism** required by the SOAR Lambda to dynamically attach the emergency deny-all quarantine policy (`pf-soar-quarantine-deny-all`) to arbitrary compromised identities.
 - **Resolution & Engineering Remediation**:
@@ -271,3 +297,44 @@ Real-world deployment obstacles and configuration bugs encountered during develo
   2. *Isolated Production State Key*: Configured both `deploy-production-plan` and `deploy-production-apply` jobs to pass `-backend-config="key=pf-shield/production/terraform.tfstate"`, guaranteeing strict state separation between simulation and production.
   3. *Fail-Fast Production Pipeline*: Eliminated all fallback branches (`-backend=false` or mock digests) from production jobs. Both plan and apply fail immediately with `exit 1` if `AWS_ROLE_TO_ASSUME` or the remote state bucket is absent or inaccessible.
   4. *Two-Phase Cosign Cryptographic Verification*: Added `cosign verify` across all three microservice digests (`LISTINGS_DIGEST`, `BROKER_KYC_DIGEST`, `SCAN_WORKER_DIGEST`) validating against `--certificate-identity-regexp` and `--certificate-oidc-issuer` immediately after signing in `container-and-sbom` and again as a hard gate prior to plan generation in `deploy-production-plan`.
+
+---
+
+### Incident 10: Regional ECS Fargate Compute Throttling Loop in me-central-1
+
+- **Symptoms & Error**:
+  ```text
+  module.container_platform.aws_ecs_service.broker_kyc_api[0]: Creating...
+  module.container_platform.aws_ecs_service.listings_api[0]: Creating...
+  Error: creating ECS Service (pf-shield-broker-kyc-api-production): ThrottlingException: Rate exceeded
+    status code: 400, request id: f48b192e-335b-4c22-9df7-71b9e0f6c268
+  $ aws ec2 run-instances --dry-run --region me-central-1
+  AuthFailure: RunInstances is currently unavailable for this account in me-central-1.
+  ```
+  **Terminal Failure Evidence:**
+  ![Terminal Failure - Incident 10](screenshots/incident-03-terminal-failure.png)
+
+- **Root Cause Analysis (RCA)**:
+  AWS enforces strict compute launch quotas for new AWS accounts in opt-in regional zones such as `me-central-1`. When Terraform provisioned `aws_ecs_service` resources, the ECS control plane repeatedly attempted to schedule Fargate tasks, triggering `ThrottlingException: Rate exceeded` in an infinite retry loop.
+
+- **Resolution & Engineering Remediation**:
+  Introduced an explicit `enable_ecs_services` variable (default `true`, configured `false` in `production.tfvars`), wrapping ECS service and autoscaling resources in `container-platform/main.tf` with conditional count logic (`count = var.enable_ecs_services ? 1 : 0`). The ECS cluster, IAM execution/task roles, task policies, and task definitions remain provisioned and ready for instantaneous service deployment once compute launch quotas are activated.
+
+---
+
+### Incident 11: CloudFront Edge Distribution Account Verification Denied
+
+- **Symptoms & Error**:
+  ```text
+  module.container_platform.aws_cloudfront_distribution.alb[0]: Creating...
+  Error: creating CloudFront Distribution: AccessDenied: Your account must be verified before you can add new CloudFront resources. To verify your account, please contact AWS Support.
+    status code: 403, request id: 18df82e4-9844-42b7-8153-6efdb53ac771
+  ```
+  **Terminal Failure Evidence:**
+  ![Terminal Failure - Incident 11](screenshots/incident-04-terminal-failure.png)
+
+- **Root Cause Analysis (RCA)**:
+  AWS enforces mandatory account verification gates before permitting the creation of global CloudFront distributions for newer AWS accounts.
+
+- **Resolution & Engineering Remediation**:
+  Configured `enable_cloudfront = false` in `production.tfvars` and enabled direct Route 53 ALB alias fallback routing. Route 53 maps `api.yousef-usama-cloud.click` directly to the Application Load Balancer in `me-central-1`, terminating TLS 1.3 with an issued Amazon RSA certificate and regional WAFv2 WebACL. The ACM certificate in `us-east-1` and its Route 53 validation records remain active for instant CloudFront enablement once the verification ticket is resolved.

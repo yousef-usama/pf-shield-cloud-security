@@ -367,6 +367,32 @@ PF-Shield provides three automated GitHub Actions workflows:
 
 ---
 
+## Live Deployment Verification & Infrastructure Proofs
+
+The PF-Shield platform is deployed live to AWS region `me-central-1` (UAE) with multi-region auxiliary assets in `eu-central-1` and global edge certificates in `us-east-1`. Live verification outputs, TLS inspection, and security boundaries are captured below:
+
+### 1. Route 53 DNS & TLS 1.3 ALB Ingress Verification
+Public domain `api.yousef-usama-cloud.click` resolves directly to the Application Load Balancer in `me-central-1`, terminating TLS 1.3 using an issued Amazon RSA 2048 certificate with WAFv2 protection:
+
+![Route 53 DNS & TLS 1.3 ALB Ingress](docs/screenshots/04-live-dns-https-alb.png)
+
+### 2. Edge API Gateway Properties Catalog (UAE PDPL Verified)
+The Edge API Gateway HTTP API (v2) delivers sovereign UAE real estate listings with strict browser security response headers (HSTS preload, CSP `default-src 'none'`, nosniff, DENY):
+
+![Edge API Gateway Properties Catalog](docs/screenshots/05-live-edge-api-catalog.png)
+
+### 3. Zero-Trust Edge Authentication Enforcement
+Unauthenticated requests attempting to generate presigned upload URLs for sensitive KYC documents are blocked directly at the edge perimeter with `HTTP/2 401 Unauthorized` before reaching compute or storage:
+
+![Zero-Trust Edge Authentication Enforcement](docs/screenshots/06-live-edge-auth-enforcement.png)
+
+### 4. Remote State Synchronization & Live Outputs
+Terraform state is synchronized against the remote S3 backend with DynamoDB distributed state locking, confirming clean zero-drift provisioning:
+
+![Remote State Synchronization & Live Outputs](docs/screenshots/09-terraform-apply-live-state.png)
+
+---
+
 ## Production Incident Post-Mortems
 
 Key architectural challenges encountered and solved during engineering are documented below and in [`docs/EVIDENCE.md`](docs/EVIDENCE.md#7-comprehensive-incident-post-mortem-log):
@@ -388,6 +414,18 @@ Key architectural challenges encountered and solved during engineering are docum
 - **RCA**: S3 bucket policy referenced KMS CMK ARN while KMS CMK key policy referenced S3 bucket ARN before resource creation.
 - **Resolution**: Refactored KMS key policy to use AWS account-scoped condition matching (`aws:SourceArn`) with wildcards, breaking the circular dependency graph cleanly.
 - **Evidence**: Documented in [`docs/EVIDENCE.md`](docs/EVIDENCE.md#incident-post-mortem-3-cyclic-dag-dependency-in-cross-module-s3-notification--kms-key-policy).
+
+### Incident 4: Regional ECS Fargate Compute Throttling Loop in me-central-1
+- **Symptoms**: `Error: creating ECS Service: ThrottlingException: Rate exceeded` during `aws_ecs_service` resource creation, with `ec2:RunInstances` unavailable in `me-central-1`.
+- **RCA**: New AWS accounts operate under strict control plane compute instance quotas in opt-in region `me-central-1`, causing Fargate container task launching to enter infinite retry throttling.
+- **Resolution**: Introduced an explicit `enable_ecs_services` toggle, wrapping active ECS services and autoscaling targets with conditional resource counts while preserving task definitions, IAM execution roles, and cluster foundation.
+- **Evidence**: [docs/screenshots/incident-03-terminal-failure.png](docs/screenshots/incident-03-terminal-failure.png).
+
+### Incident 5: CloudFront Edge Distribution Account Verification Denied
+- **Symptoms**: `Error: creating CloudFront Distribution: AccessDenied: Your account must be verified before you can add new CloudFront resources`.
+- **RCA**: AWS enforces account verification gates before enabling global edge distribution creation for newer AWS accounts.
+- **Resolution**: Configured `enable_cloudfront = false` and routed Route 53 `api.yousef-usama-cloud.click` directly to the Application Load Balancer with TLS 1.3 ACM cert and WAFv2, preserving global ACM validation for future enablement.
+- **Evidence**: [docs/screenshots/incident-04-terminal-failure.png](docs/screenshots/incident-04-terminal-failure.png).
 
 ---
 

@@ -61,9 +61,9 @@ module "soar_engine" {
 module "secrets" {
   source = "./modules/secrets"
 
-  environment           = var.environment
-  kms_key_arn           = module.zero_trust_kyc_vault.kms_key_arn
-  quarantine_policy_arn = module.iam_boundaries.quarantine_policy_arn
+  environment            = var.environment
+  kms_key_arn            = module.zero_trust_kyc_vault.kms_key_arn
+  quarantine_policy_arn  = module.iam_boundaries.quarantine_policy_arn
   kyc_vault_bucket_arn   = module.zero_trust_kyc_vault.kyc_vault_bucket_arn
   enable_sns_topic_param = true
   sns_topic_arn          = module.soar_engine.security_incidents_sns_topic_arn

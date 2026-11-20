@@ -88,16 +88,16 @@ resource "aws_lambda_function" "property_api" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue omitted for stateless synchronous public API read handler
   #checkov:skip=CKV_AWS_117: Lambda is not VPC-bound to ensure $0 idle compute cost without NAT Gateway overhead
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
-  function_name                  = "pf-property-api-${var.environment}"
-  role                           = aws_iam_role.property_api_role.arn
-  handler                        = "property_api_handler.lambda_handler"
-  runtime                        = "python3.12"
-  architectures                  = ["arm64"]
-  memory_size                    = 128
-  timeout                        = 10
-  filename                       = data.archive_file.property_api_zip.output_path
-  source_code_hash               = data.archive_file.property_api_zip.output_base64sha256
-  kms_key_arn                    = var.kms_key_arn
+  function_name    = "pf-property-api-${var.environment}"
+  role             = aws_iam_role.property_api_role.arn
+  handler          = "property_api_handler.lambda_handler"
+  runtime          = "python3.12"
+  architectures    = ["arm64"]
+  memory_size      = 128
+  timeout          = 10
+  filename         = data.archive_file.property_api_zip.output_path
+  source_code_hash = data.archive_file.property_api_zip.output_base64sha256
+  kms_key_arn      = var.kms_key_arn
 
   environment {
     variables = {
@@ -203,16 +203,16 @@ resource "aws_lambda_function" "kyc_vault" {
   #checkov:skip=CKV_AWS_116: Dead Letter Queue omitted for stateless synchronous presign handler
   #checkov:skip=CKV_AWS_117: Lambda is not VPC-bound to maintain $0 idle compute cost
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
-  function_name                  = "pf-kyc-vault-${var.environment}"
-  role                           = aws_iam_role.kyc_vault_role.arn
-  handler                        = "kyc_vault_handler.lambda_handler"
-  runtime                        = "python3.12"
-  architectures                  = ["arm64"]
-  memory_size                    = 128
-  timeout                        = 10
-  filename                       = data.archive_file.kyc_vault_zip.output_path
-  source_code_hash               = data.archive_file.kyc_vault_zip.output_base64sha256
-  kms_key_arn                    = var.kms_key_arn
+  function_name    = "pf-kyc-vault-${var.environment}"
+  role             = aws_iam_role.kyc_vault_role.arn
+  handler          = "kyc_vault_handler.lambda_handler"
+  runtime          = "python3.12"
+  architectures    = ["arm64"]
+  memory_size      = 128
+  timeout          = 10
+  filename         = data.archive_file.kyc_vault_zip.output_path
+  source_code_hash = data.archive_file.kyc_vault_zip.output_base64sha256
+  kms_key_arn      = var.kms_key_arn
 
   environment {
     variables = {
