@@ -105,6 +105,14 @@ resource "aws_iam_policy" "github_actions_policy" {
         Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/pf-shield-tf-locks"
       },
       {
+        Sid    = "ECRAuthorization"
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken"
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "PFShieldResourceManagement"
         Effect = "Allow"
         Action = [
@@ -169,6 +177,7 @@ resource "aws_iam_policy" "github_actions_policy" {
           StringEquals = {
             "aws:RequestedRegion" = [
               var.aws_region,
+              var.aws_region_ecr,
               "us-east-1"
             ]
           }
