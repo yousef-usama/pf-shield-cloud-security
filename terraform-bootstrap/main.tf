@@ -70,6 +70,7 @@ resource "aws_iam_role" "github_actions" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_iam_policy" "github_actions_policy" {
+  #checkov:skip=CKV_AWS_286: IAM role and instance profile lifecycle management required for Terraform deployment
   #checkov:skip=CKV_AWS_288: Scoped infrastructure orchestration policy for GitHub Actions CI/CD automation
   #checkov:skip=CKV_AWS_289: IAM permission management required for Terraform role provisioning and cleanup
   #checkov:skip=CKV_AWS_290: Broad action scope required for full Terraform deployment and 1-click teardown
@@ -113,41 +114,9 @@ resource "aws_iam_policy" "github_actions_policy" {
         Resource = "*"
       },
       {
-        Sid    = "PFShieldResourceManagement"
+        Sid    = "GlobalServicesManagement"
         Effect = "Allow"
         Action = [
-          "s3:*",
-          "dynamodb:*",
-          "lambda:*",
-          "apigateway:*",
-          "events:*",
-          "sns:*",
-          "sqs:*",
-          "kms:*",
-          "wafv2:*",
-          "ssm:*",
-          "logs:*",
-          "cloudwatch:*",
-          "budgets:*",
-          "ecr:*",
-          "ec2:Describe*",
-          "ec2:CreateVpc*",
-          "ec2:DeleteVpc*",
-          "ec2:ModifyVpc*",
-          "ec2:CreateSubnet*",
-          "ec2:DeleteSubnet*",
-          "ec2:ModifySubnet*",
-          "ec2:CreateRoute*",
-          "ec2:DeleteRoute*",
-          "ec2:CreateSecurityGroup*",
-          "ec2:DeleteSecurityGroup*",
-          "ec2:AuthorizeSecurityGroup*",
-          "ec2:RevokeSecurityGroup*",
-          "ec2:CreateVpcEndpoint*",
-          "ec2:DeleteVpcEndpoints",
-          "ec2:ModifyVpcEndpoint*",
-          "ec2:CreateTags",
-          "ec2:DeleteTags",
           "iam:GetRole",
           "iam:GetRolePolicy",
           "iam:ListRolePolicies",
@@ -170,6 +139,63 @@ resource "aws_iam_policy" "github_actions_policy" {
           "iam:UntagRole",
           "iam:TagPolicy",
           "iam:UntagPolicy",
+          "iam:GetInstanceProfile",
+          "iam:CreateInstanceProfile",
+          "iam:DeleteInstanceProfile",
+          "iam:AddRoleToInstanceProfile",
+          "iam:RemoveRoleFromInstanceProfile",
+          "iam:ListInstanceProfilesForRole",
+          "route53:*",
+          "cloudfront:*"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "PFShieldRegionalManagement"
+        Effect = "Allow"
+        Action = [
+          "s3:*",
+          "dynamodb:*",
+          "lambda:*",
+          "apigateway:*",
+          "events:*",
+          "sns:*",
+          "sqs:*",
+          "kms:*",
+          "wafv2:*",
+          "ssm:*",
+          "logs:*",
+          "cloudwatch:*",
+          "budgets:*",
+          "ecr:*",
+          "ecs:*",
+          "elasticloadbalancing:*",
+          "acm:*",
+          "cognito-idp:*",
+          "cognito-identity:*",
+          "glue:*",
+          "guardduty:*",
+          "securityhub:*",
+          "application-autoscaling:*",
+          "secretsmanager:*",
+          "ec2:Describe*",
+          "ec2:CreateVpc*",
+          "ec2:DeleteVpc*",
+          "ec2:ModifyVpc*",
+          "ec2:CreateSubnet*",
+          "ec2:DeleteSubnet*",
+          "ec2:ModifySubnet*",
+          "ec2:CreateRoute*",
+          "ec2:DeleteRoute*",
+          "ec2:CreateSecurityGroup*",
+          "ec2:DeleteSecurityGroup*",
+          "ec2:AuthorizeSecurityGroup*",
+          "ec2:RevokeSecurityGroup*",
+          "ec2:CreateVpcEndpoint*",
+          "ec2:DeleteVpcEndpoints",
+          "ec2:ModifyVpcEndpoint*",
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
           "cloudtrail:*"
         ]
         Resource = "*"
