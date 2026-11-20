@@ -4,7 +4,7 @@
 # =====================================================================================================================
 
 # Stage 1: Build Dependencies
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 
 WORKDIR /build
 
@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Hardened Runtime Container
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.15-slim-bookworm AS runtime
 
 # Install minimal curl for container health check probes
 RUN apt-get update && \
