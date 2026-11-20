@@ -48,6 +48,12 @@ variable "log_retention_days" {
   default     = 7
 }
 
+variable "enable_jwt_authorizer" {
+  description = "Toggle to configure Cognito JWT authorizer on HTTP API Gateway"
+  type        = bool
+  default     = true
+}
+
 variable "user_pool_endpoint" {
   description = "Cognito User Pool endpoint for JWT validation"
   type        = string

@@ -163,7 +163,7 @@ resource "aws_cloudwatch_metric_alarm" "soar_lambda_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests_high" {
-  count               = var.enable_waf && var.waf_web_acl_name != null ? 1 : 0
+  count               = var.enable_waf ? 1 : 0
   alarm_name          = "pf-waf-blocked-requests-high-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -184,7 +184,7 @@ resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "waf_ratelimit_triggered" {
-  count               = var.enable_waf && var.waf_web_acl_name != null ? 1 : 0
+  count               = var.enable_waf ? 1 : 0
   alarm_name          = "pf-waf-ratelimit-scrapers-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -205,7 +205,7 @@ resource "aws_cloudwatch_metric_alarm" "waf_ratelimit_triggered" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
-  count               = var.alb_arn_suffix != null ? 1 : 0
+  count               = var.enable_alb_alarms ? 1 : 0
   alarm_name          = "pf-alb-target-5xx-high-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -224,7 +224,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_4xx_probing" {
-  count               = var.alb_arn_suffix != null ? 1 : 0
+  count               = var.enable_alb_alarms ? 1 : 0
   alarm_name          = "pf-alb-target-4xx-probing-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1

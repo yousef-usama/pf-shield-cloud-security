@@ -35,7 +35,7 @@ resource "aws_ssm_parameter" "kyc_vault_bucket_arn" {
 }
 
 resource "aws_ssm_parameter" "sns_topic_arn" {
-  count       = var.sns_topic_arn != "" ? 1 : 0
+  count       = var.enable_sns_topic_param ? 1 : 0
   name        = "/pf-shield/${var.environment}/sns-topic-arn"
   description = "Security operations notification SNS topic ARN"
   type        = "SecureString"

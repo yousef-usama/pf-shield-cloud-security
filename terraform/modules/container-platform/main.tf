@@ -608,7 +608,7 @@ resource "aws_lb_listener_rule" "broker_kyc_api" {
 
 # WAFv2 Association for Public Application Load Balancer
 resource "aws_wafv2_web_acl_association" "alb_waf" {
-  count        = var.waf_web_acl_arn != null ? 1 : 0
+  count        = var.enable_waf ? 1 : 0
   resource_arn = aws_lb.main.arn
   web_acl_arn  = var.waf_web_acl_arn
 }

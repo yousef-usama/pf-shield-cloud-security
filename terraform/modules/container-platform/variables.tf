@@ -177,6 +177,12 @@ variable "enable_deletion_protection" {
   default     = false
 }
 
+variable "enable_waf" {
+  description = "Toggle to associate WAFv2 WebACL with Application Load Balancer"
+  type        = bool
+  default     = false
+}
+
 variable "waf_web_acl_arn" {
   description = "Optional WAFv2 WebACL ARN to associate with the Application Load Balancer"
   type        = string

@@ -45,6 +45,12 @@ variable "enable_dashboard" {
   default     = true
 }
 
+variable "enable_alb_alarms" {
+  description = "Toggle to provision CloudWatch metric alarms for the Application Load Balancer"
+  type        = bool
+  default     = false
+}
+
 variable "alb_arn_suffix" {
   description = "ARN suffix of the Application Load Balancer for CloudWatch metrics"
   type        = string

@@ -64,8 +64,9 @@ module "secrets" {
   environment           = var.environment
   kms_key_arn           = module.zero_trust_kyc_vault.kms_key_arn
   quarantine_policy_arn = module.iam_boundaries.quarantine_policy_arn
-  kyc_vault_bucket_arn  = module.zero_trust_kyc_vault.kyc_vault_bucket_arn
-  sns_topic_arn         = module.soar_engine.security_incidents_sns_topic_arn
+  kyc_vault_bucket_arn   = module.zero_trust_kyc_vault.kyc_vault_bucket_arn
+  enable_sns_topic_param = true
+  sns_topic_arn          = module.soar_engine.security_incidents_sns_topic_arn
 }
 
 # 7. Broker Identity & OIDC Provider (Amazon Cognito)
@@ -89,6 +90,7 @@ module "edge_api_waf" {
   kyc_vault_bucket_name   = module.zero_trust_kyc_vault.kyc_vault_bucket_name
   enable_waf              = var.enable_waf
   enable_waf_logging      = var.enable_waf_logging
+  enable_jwt_authorizer   = true
   log_retention_days      = var.log_retention_days
   user_pool_endpoint      = module.identity.user_pool_endpoint
   user_pool_client_id     = module.identity.user_pool_client_id
@@ -119,6 +121,7 @@ module "container_platform" {
   sns_topic_arn                         = module.soar_engine.security_incidents_sns_topic_arn
   ecs_desired_count                     = var.ecs_desired_count
   enable_deletion_protection            = var.enable_deletion_protection
+  enable_waf                            = var.enable_waf
   waf_web_acl_arn                       = module.edge_api_waf.waf_web_acl_arn
   enable_cloudfront                     = var.enable_cloudfront
   public_domain_name                    = var.public_domain_name
@@ -148,6 +151,7 @@ module "observability" {
   kyc_vault_bucket_name      = module.zero_trust_kyc_vault.kyc_vault_bucket_name
   sns_topic_arn              = module.soar_engine.security_incidents_sns_topic_arn
   enable_dashboard           = var.enable_observability_dashboard
+  enable_alb_alarms          = true
   alb_arn_suffix             = module.container_platform.alb_arn_suffix
   waf_web_acl_name           = module.edge_api_waf.waf_web_acl_name
   enable_waf                 = var.enable_waf

@@ -4,6 +4,9 @@
 *.tfstate.*
 crash.log
 crash.*.log
+*.tfplan
+*plan
+tfplan
 *.tfvars
 !terraform/demo.tfvars
 !terraform/production.tfvars

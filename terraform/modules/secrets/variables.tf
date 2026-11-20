@@ -14,6 +14,12 @@ variable "quarantine_policy_arn" {
   type        = string
 }
 
+variable "enable_sns_topic_param" {
+  description = "Toggle to store SNS topic ARN in SSM Parameter Store"
+  type        = bool
+  default     = true
+}
+
 variable "sns_topic_arn" {
   description = "The ARN of the security incidents SNS topic to store securely"
   type        = string

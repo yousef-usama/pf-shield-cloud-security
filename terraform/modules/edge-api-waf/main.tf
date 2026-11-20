@@ -321,7 +321,7 @@ resource "aws_apigatewayv2_integration" "kyc_vault" {
 }
 
 resource "aws_apigatewayv2_authorizer" "cognito_jwt" {
-  count            = var.user_pool_endpoint != "" ? 1 : 0
+  count            = var.enable_jwt_authorizer ? 1 : 0
   api_id           = aws_apigatewayv2_api.edge_api.id
   authorizer_type  = "JWT"
   identity_sources = ["$request.header.Authorization"]
@@ -337,8 +337,8 @@ resource "aws_apigatewayv2_route" "post_kyc_presign" {
   api_id             = aws_apigatewayv2_api.edge_api.id
   route_key          = "POST /api/v1/kyc/presign"
   target             = "integrations/${aws_apigatewayv2_integration.kyc_vault.id}"
-  authorization_type = var.user_pool_endpoint != "" ? "JWT" : "NONE"
-  authorizer_id      = var.user_pool_endpoint != "" ? aws_apigatewayv2_authorizer.cognito_jwt[0].id : null
+  authorization_type = var.enable_jwt_authorizer ? "JWT" : "NONE"
+  authorizer_id      = var.enable_jwt_authorizer ? aws_apigatewayv2_authorizer.cognito_jwt[0].id : null
 }
 
 resource "aws_lambda_permission" "allow_apigw_kyc_vault" {
