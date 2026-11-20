@@ -33,7 +33,9 @@ resource "aws_kms_key" "pf_kyc_cmk" {
             "logs.${var.aws_region}.amazonaws.com",
             "ssm.amazonaws.com",
             "events.amazonaws.com",
-            "sqs.amazonaws.com"
+            "sqs.amazonaws.com",
+            "cloudtrail.amazonaws.com",
+            "config.amazonaws.com"
           ]
         }
         Action = [

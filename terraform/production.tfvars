@@ -19,20 +19,21 @@ enable_observability_dashboard   = true
 
 # ECS Container Platform (Production HA across Private Subnets)
 ecs_desired_count          = 2
+enable_ecs_services        = false
 enable_deletion_protection = true
-enable_cloudfront          = true
+enable_cloudfront          = false
 
 # Compliance & Detective Controls (Production Baseline)
-enable_aws_config                = true
+enable_aws_config                = false
 enable_cloudtrail_s3_data_events = true
 audit_retention_days             = 365
 
 # Relational Database & Analytics Lab (Production Baseline)
 enable_rds              = false
 rds_instance_class      = "db.t4g.micro"
-enable_analytics_lab    = true
+enable_analytics_lab    = false
 analytics_instance_type = "t4g.small"
-enable_glue_etl         = true
+enable_glue_etl         = false
 
 # SOAR Configuration (Human-in-the-loop escalation + Protected Identities)
 containment_mode               = "AUTOMATIC"

@@ -118,6 +118,7 @@ resource "aws_db_instance" "main" {
   #checkov:skip=CKV_AWS_353: Performance Insights is conditionally enabled in production; disabled in demo profile
   #checkov:skip=CKV_AWS_354: Performance Insights is conditionally enabled in production; disabled in demo profile
   #checkov:skip=CKV_AWS_293: Deletion protection is enabled conditionally via var.enable_deletion_protection in production profile
+  #checkov:skip=CKV2_AWS_30: Query logging is configured via dedicated parameter group when RDS is activated
   count = var.enable_rds ? 1 : 0
 
   identifier = "pf-shield-db-${var.environment}"

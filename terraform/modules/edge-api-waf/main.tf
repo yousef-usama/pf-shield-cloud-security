@@ -84,6 +84,7 @@ resource "aws_cloudwatch_log_group" "property_api_logs" {
 }
 
 resource "aws_lambda_function" "property_api" {
+  #checkov:skip=CKV_AWS_115: Function-level concurrent execution limit omitted to avoid depleting account unreserved concurrency below regional minimum quota
   #checkov:skip=CKV_AWS_116: Dead Letter Queue omitted for stateless synchronous public API read handler
   #checkov:skip=CKV_AWS_117: Lambda is not VPC-bound to ensure $0 idle compute cost without NAT Gateway overhead
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
@@ -94,7 +95,6 @@ resource "aws_lambda_function" "property_api" {
   architectures                  = ["arm64"]
   memory_size                    = 128
   timeout                        = 10
-  reserved_concurrent_executions = 10
   filename                       = data.archive_file.property_api_zip.output_path
   source_code_hash               = data.archive_file.property_api_zip.output_base64sha256
   kms_key_arn                    = var.kms_key_arn
@@ -199,6 +199,7 @@ resource "aws_cloudwatch_log_group" "kyc_vault_logs" {
 }
 
 resource "aws_lambda_function" "kyc_vault" {
+  #checkov:skip=CKV_AWS_115: Function-level concurrent execution limit omitted to avoid depleting account unreserved concurrency below regional minimum quota
   #checkov:skip=CKV_AWS_116: Dead Letter Queue omitted for stateless synchronous presign handler
   #checkov:skip=CKV_AWS_117: Lambda is not VPC-bound to maintain $0 idle compute cost
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
@@ -209,7 +210,6 @@ resource "aws_lambda_function" "kyc_vault" {
   architectures                  = ["arm64"]
   memory_size                    = 128
   timeout                        = 10
-  reserved_concurrent_executions = 10
   filename                       = data.archive_file.kyc_vault_zip.output_path
   source_code_hash               = data.archive_file.kyc_vault_zip.output_base64sha256
   kms_key_arn                    = var.kms_key_arn
@@ -240,7 +240,7 @@ resource "aws_apigatewayv2_api" "edge_api" {
   description   = "PF-Shield Zero-Trust HTTP API with native rate limiting and edge security"
 
   cors_configuration {
-    allow_origins = ["https://*.pf-shield.ae", "https://*.realestate.ae"]
+    allow_origins = ["https://pf-shield.ae", "https://app.pf-shield.ae", "https://realestate.ae"]
     allow_methods = ["GET", "POST", "OPTIONS"]
     allow_headers = ["content-type", "authorization", "x-requested-with"]
     max_age       = 300
@@ -524,11 +524,6 @@ resource "aws_wafv2_web_acl" "edge_waf" {
   }
 }
 
-resource "aws_wafv2_web_acl_association" "edge_waf_association" {
-  count        = var.enable_waf ? 1 : 0
-  resource_arn = aws_apigatewayv2_stage.default.arn
-  web_acl_arn  = aws_wafv2_web_acl.edge_waf[0].arn
-}
 
 # ---------------------------------------------------------------------------------------------------------------------
 # 6. WAF LOGGING CONFIGURATION (ACTIVE IN PRODUCTION / ENABLE_WAF_LOGGING)

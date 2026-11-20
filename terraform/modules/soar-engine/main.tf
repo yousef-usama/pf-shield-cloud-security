@@ -416,6 +416,7 @@ resource "aws_cloudwatch_log_group" "s3_lockdown_logs" {
 }
 
 resource "aws_lambda_function" "s3_lockdown" {
+  #checkov:skip=CKV_AWS_115: Function-level concurrent execution limit omitted to avoid depleting account unreserved concurrency below regional minimum quota
   #checkov:skip=CKV_AWS_116: Dead Letter Queue configured below via dead_letter_config block
   #checkov:skip=CKV_AWS_117: Lambda is intentionally non-VPC to avoid expensive VPC NAT gateways and reach IAM/SNS directly
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
@@ -426,7 +427,6 @@ resource "aws_lambda_function" "s3_lockdown" {
   architectures                  = ["arm64"]
   memory_size                    = 128
   timeout                        = 10
-  reserved_concurrent_executions = 10
   filename                       = data.archive_file.s3_lockdown_zip.output_path
   source_code_hash               = data.archive_file.s3_lockdown_zip.output_base64sha256
   kms_key_arn                    = var.kms_key_arn
@@ -554,6 +554,7 @@ resource "aws_cloudwatch_log_group" "iam_quarantine_logs" {
 }
 
 resource "aws_lambda_function" "iam_quarantine" {
+  #checkov:skip=CKV_AWS_115: Function-level concurrent execution limit omitted to avoid depleting account unreserved concurrency below regional minimum quota
   #checkov:skip=CKV_AWS_116: Dead Letter Queue configured below via dead_letter_config block
   #checkov:skip=CKV_AWS_117: Lambda is intentionally non-VPC to avoid expensive VPC NAT gateways and reach IAM/SNS directly
   #checkov:skip=CKV_AWS_272: Code signing omitted for simplified serverless deployment
@@ -564,7 +565,6 @@ resource "aws_lambda_function" "iam_quarantine" {
   architectures                  = ["arm64"]
   memory_size                    = 128
   timeout                        = 10
-  reserved_concurrent_executions = 10
   filename                       = data.archive_file.iam_quarantine_zip.output_path
   source_code_hash               = data.archive_file.iam_quarantine_zip.output_base64sha256
   kms_key_arn                    = var.kms_key_arn

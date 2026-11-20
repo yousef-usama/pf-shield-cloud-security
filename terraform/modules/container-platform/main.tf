@@ -429,7 +429,7 @@ resource "aws_acm_certificate_validation" "alb" {
 # Dedicated CloudFront Edge Certificate in us-east-1 (Required for CloudFront Custom Domain)
 resource "aws_acm_certificate" "cloudfront" {
   provider          = aws.us_east_1
-  count             = var.enable_cloudfront && var.public_domain_name != "" ? 1 : 0
+  count             = var.public_domain_name != "" ? 1 : 0
   domain_name       = "api.${var.public_domain_name}"
   validation_method = "DNS"
 
@@ -451,7 +451,7 @@ resource "aws_acm_certificate" "cloudfront" {
 
 # Route 53 DNS Validation Records for CloudFront us-east-1 ACM Certificate
 resource "aws_route53_record" "cloudfront_cert_validation" {
-  for_each = (var.enable_cloudfront && var.route53_zone_id != "" && length(aws_acm_certificate.cloudfront) > 0) ? {
+  for_each = (var.route53_zone_id != "" && length(aws_acm_certificate.cloudfront) > 0) ? {
     for dvo in aws_acm_certificate.cloudfront[0].domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
@@ -469,7 +469,7 @@ resource "aws_route53_record" "cloudfront_cert_validation" {
 
 resource "aws_acm_certificate_validation" "cloudfront" {
   provider                = aws.us_east_1
-  count                   = var.enable_cloudfront && var.public_domain_name != "" && var.route53_zone_id != "" ? 1 : 0
+  count                   = var.public_domain_name != "" && var.route53_zone_id != "" && length(aws_acm_certificate.cloudfront) > 0 ? 1 : 0
   certificate_arn         = aws_acm_certificate.cloudfront[0].arn
   validation_record_fqdns = [for record in aws_route53_record.cloudfront_cert_validation : record.fqdn]
 }
@@ -482,21 +482,21 @@ resource "aws_route53_record" "api_alias" {
   type    = "A"
 
   alias {
-    name                   = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].domain_name : aws_lb.main.dns_name
-    zone_id                = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].hosted_zone_id : aws_lb.main.zone_id
+    name                   = (var.enable_cloudfront && length(aws_cloudfront_distribution.alb) > 0) ? aws_cloudfront_distribution.alb[0].domain_name : aws_lb.main.dns_name
+    zone_id                = (var.enable_cloudfront && length(aws_cloudfront_distribution.alb) > 0) ? aws_cloudfront_distribution.alb[0].hosted_zone_id : aws_lb.main.zone_id
     evaluate_target_health = true
   }
 }
 
 resource "aws_route53_record" "api_alias_ipv6" {
-  count   = var.route53_zone_id != "" && var.public_domain_name != "" ? 1 : 0
+  count   = var.route53_zone_id != "" && var.public_domain_name != "" && var.enable_cloudfront ? 1 : 0
   zone_id = var.route53_zone_id
   name    = "api.${var.public_domain_name}"
   type    = "AAAA"
 
   alias {
-    name                   = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].domain_name : aws_lb.main.dns_name
-    zone_id                = var.enable_cloudfront ? aws_cloudfront_distribution.alb[0].hosted_zone_id : aws_lb.main.zone_id
+    name                   = (var.enable_cloudfront && length(aws_cloudfront_distribution.alb) > 0) ? aws_cloudfront_distribution.alb[0].domain_name : aws_lb.main.dns_name
+    zone_id                = (var.enable_cloudfront && length(aws_cloudfront_distribution.alb) > 0) ? aws_cloudfront_distribution.alb[0].hosted_zone_id : aws_lb.main.zone_id
     evaluate_target_health = true
   }
 }
@@ -932,6 +932,7 @@ resource "aws_ecs_task_definition" "document_scan_worker" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_ecs_service" "listings_api" {
+  count                  = var.enable_ecs_services ? 1 : 0
   name                   = "pf-shield-listings-api-${var.environment}"
   cluster                = aws_ecs_cluster.primary.id
   task_definition        = aws_ecs_task_definition.listings_api.arn
@@ -962,6 +963,7 @@ resource "aws_ecs_service" "listings_api" {
 }
 
 resource "aws_ecs_service" "broker_kyc_api" {
+  count                  = var.enable_ecs_services ? 1 : 0
   name                   = "pf-shield-broker-kyc-api-${var.environment}"
   cluster                = aws_ecs_cluster.primary.id
   task_definition        = aws_ecs_task_definition.broker_kyc_api.arn
@@ -992,6 +994,7 @@ resource "aws_ecs_service" "broker_kyc_api" {
 }
 
 resource "aws_ecs_service" "document_scan_worker" {
+  count                  = var.enable_ecs_services ? 1 : 0
   name                   = "pf-shield-document-scan-worker-${var.environment}"
   cluster                = aws_ecs_cluster.primary.id
   task_definition        = aws_ecs_task_definition.document_scan_worker.arn
@@ -1020,19 +1023,21 @@ resource "aws_ecs_service" "document_scan_worker" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_appautoscaling_target" "listings_api" {
+  count              = var.enable_ecs_services ? 1 : 0
   max_capacity       = 10
   min_capacity       = var.ecs_desired_count
-  resource_id        = "service/${aws_ecs_cluster.primary.name}/${aws_ecs_service.listings_api.name}"
+  resource_id        = "service/${aws_ecs_cluster.primary.name}/${aws_ecs_service.listings_api[0].name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }
 
 resource "aws_appautoscaling_policy" "listings_api_cpu" {
+  count              = var.enable_ecs_services ? 1 : 0
   name               = "pf-listings-cpu-target-tracking"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.listings_api.resource_id
-  scalable_dimension = aws_appautoscaling_target.listings_api.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.listings_api.service_namespace
+  resource_id        = aws_appautoscaling_target.listings_api[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.listings_api[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.listings_api[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {

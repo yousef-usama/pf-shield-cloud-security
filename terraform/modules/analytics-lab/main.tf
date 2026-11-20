@@ -310,7 +310,8 @@ resource "aws_glue_catalog_database" "analytics" {
 }
 
 resource "aws_glue_security_configuration" "main" {
-  name = "pf-shield-glue-sec-config-${var.environment}"
+  count = var.enable_glue_etl ? 1 : 0
+  name  = "pf-shield-glue-sec-config-${var.environment}"
 
   encryption_configuration {
     cloudwatch_encryption {
@@ -412,7 +413,7 @@ resource "aws_glue_job" "sanitize_listings" {
   count                  = var.enable_glue_etl ? 1 : 0
   name                   = "pf-shield-sanitize-listings-etl-${var.environment}"
   role_arn               = aws_iam_role.glue_role.arn
-  security_configuration = aws_glue_security_configuration.main.name
+  security_configuration = length(aws_glue_security_configuration.main) > 0 ? aws_glue_security_configuration.main[0].name : null
   glue_version           = "4.0"
   worker_type            = "G.1X"
   number_of_workers      = 2

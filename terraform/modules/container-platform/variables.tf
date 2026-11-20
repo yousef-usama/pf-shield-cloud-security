@@ -195,3 +195,9 @@ variable "enable_cloudfront" {
   default     = false
 }
 
+variable "enable_ecs_services" {
+  description = "Toggle to provision active ECS services (false if regional compute is restricted)"
+  type        = bool
+  default     = true
+}
+

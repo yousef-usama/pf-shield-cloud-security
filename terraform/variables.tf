@@ -76,6 +76,12 @@ variable "enable_deletion_protection" {
   default     = false
 }
 
+variable "enable_ecs_services" {
+  description = "FinOps/regional toggle to provision active ECS services (toggle false if regional compute quota is restricted)"
+  type        = bool
+  default     = true
+}
+
 variable "enable_aws_config" {
   description = "FinOps toggle to enable AWS Config continuous compliance recording and managed rules"
   type        = bool

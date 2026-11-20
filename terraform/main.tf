@@ -128,6 +128,7 @@ module "container_platform" {
   enable_waf                            = var.enable_waf
   waf_web_acl_arn                       = module.edge_api_waf.waf_web_acl_arn
   enable_cloudfront                     = var.enable_cloudfront
+  enable_ecs_services                   = var.enable_ecs_services
   public_domain_name                    = var.public_domain_name
   route53_zone_id                       = var.route53_zone_id
   ecr_repository_urls                   = var.ecr_repository_urls

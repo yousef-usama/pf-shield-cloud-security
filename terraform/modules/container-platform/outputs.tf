@@ -35,17 +35,17 @@ output "ecr_document_scan_worker_repository_url" {
 
 output "listings_api_service_name" {
   description = "The name of the listings API ECS service"
-  value       = aws_ecs_service.listings_api.name
+  value       = var.enable_ecs_services ? aws_ecs_service.listings_api[0].name : null
 }
 
 output "broker_kyc_api_service_name" {
   description = "The name of the broker KYC API ECS service"
-  value       = aws_ecs_service.broker_kyc_api.name
+  value       = var.enable_ecs_services ? aws_ecs_service.broker_kyc_api[0].name : null
 }
 
 output "document_scan_worker_service_name" {
   description = "The name of the document scan worker ECS service"
-  value       = aws_ecs_service.document_scan_worker.name
+  value       = var.enable_ecs_services ? aws_ecs_service.document_scan_worker[0].name : null
 }
 
 output "alb_arn_suffix" {
