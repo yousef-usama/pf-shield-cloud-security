@@ -177,7 +177,7 @@ resource "aws_iam_policy" "github_actions_policy" {
           StringEquals = {
             "aws:RequestedRegion" = [
               var.aws_region,
-              var.aws_region_ecr,
+              var.ecr_region,
               "us-east-1"
             ]
           }
