@@ -271,6 +271,7 @@ resource "aws_ecr_repository" "listings_api" {
   provider             = aws.ecr
   name                 = "pf-shield/listings-api-${var.environment}"
   image_tag_mutability = "IMMUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -292,6 +293,7 @@ resource "aws_ecr_repository" "broker_kyc_api" {
   provider             = aws.ecr
   name                 = "pf-shield/broker-kyc-api-${var.environment}"
   image_tag_mutability = "IMMUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -313,6 +315,7 @@ resource "aws_ecr_repository" "document_scan_worker" {
   provider             = aws.ecr
   name                 = "pf-shield/document-scan-worker-${var.environment}"
   image_tag_mutability = "IMMUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
